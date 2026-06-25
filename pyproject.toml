@@ -50,7 +50,7 @@ mysql = [
 ]
 
 [project.scripts]
-google-indexer = "seo_indexer:main"
+google-indexer-cli = "seo_indexer:main"
 
 [project.urls]
 Homepage = "https://github.com/cleven12/google-indexer-cli"
