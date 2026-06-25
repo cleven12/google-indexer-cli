@@ -1,16 +1,15 @@
 # google-indexer-cli
 
-A lightweight, reusable CLI tool for manually controlling Google Indexing API submissions and Search Console URL inspections.
+[![CI](https://github.com/cleven12/google-indexer-cli/workflows/CI/badge.svg)](https://github.com/cleven12/google-indexer-cli/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
+[![GitHub release](https://img.shields.io/github/v/release/cleven12/google-indexer-cli)](https://github.com/cleven12/google-indexer-cli/releases)
 
-A lightweight, reusable CLI tool for manually controlling Google Indexing API submissions and Search Console URL inspections.
+A simple, lightweight CLI tool to submit URLs to Google Indexing API and run Search Console inspections — with excellent resume support.
 
-**Perfect for**:
-- Static sites, blogs, or any site with a sitemap
-- Shared hosting environments (run indexing from your laptop)
-- Teams that want fine-grained control and reliable resume across days/quotas
-- Open source portfolio projects
+**Perfect for** site owners, bloggers, and SEO folks who want direct control without relying on slow auto-indexing.
 
-Built with proven lightweight techniques (openssl JWT, no heavy Google SDKs).
+Built with openssl JWT (no heavy SDKs). Supports sqlite / json / mysql history backends.
 
 ## Features
 
@@ -30,134 +29,114 @@ Built with proven lightweight techniques (openssl JWT, no heavy Google SDKs).
 ### Installation
 
 ```bash
-# From source (recommended while in development)
-pip install .
-
-# Or directly
 pip install git+https://github.com/cleven12/google-indexer-cli.git
 ```
 
-After installation, the command `google-indexer-cli` becomes available globally.
+Or from source:
+```bash
+git clone https://github.com/cleven12/google-indexer-cli.git
+cd google-indexer-cli
+pip install .
+```
 
 ### Basic Usage
 
 ```bash
-# Basic usage (replace with your site)
 google-indexer-cli \
   --site https://example.com \
-  --sitemap https://example.com/sitemap.xml \
-  --service-account service_account.json \
   --submit --inspect --resume
 ```
 
-You can still run directly with Python:
+### Use in Different Environments
 
+**macOS / Linux**
 ```bash
-python seo_indexer.py --site https://example.com ...
+# With pipx (recommended for CLI tools)
+pipx install git+https://github.com/cleven12/google-indexer-cli.git
+google-indexer-cli --status
 ```
+
+**Windows (PowerShell)**
+```powershell
+pip install git+https://github.com/cleven12/google-indexer-cli.git
+google-indexer-cli --submit --inspect --resume
+```
+
+**Docker**
+```bash
+docker run --rm -v $(pwd):/work -w /work python:3.11 \
+  sh -c "pip install git+https://github.com/cleven12/google-indexer-cli.git && \
+         google-indexer-cli --site https://example.com --submit --inspect"
+```
+
+**GitHub Actions** (example for static sites)
+```yaml
+- name: Index new pages
+  run: |
+    pip install git+https://github.com/cleven12/google-indexer-cli.git
+    google-indexer-cli --site https://example.com --submit --inspect --resume --limit 50
+```
+
+### Using with AI Tools (Claude / Google APIs)
+
+This tool shines when combined with AI for content + indexing workflows:
+
+1. Use **Claude** (Anthropic) or **Google Gemini** to generate new pages/posts and update your sitemap.
+2. Run the indexer on the new URLs so Google discovers them faster.
+
+Example flow:
+```bash
+# 1. Generate content with Claude / Gemini (your own script)
+# 2. Rebuild sitemap
+# 3. Index immediately
+google-indexer-cli --site https://example.com --submit --inspect --resume
+```
+
+This combination (AI content generation + direct Google Indexing) helps get fresh content indexed quickly.
 
 ### Common Commands
 
 ```bash
-# Full submit + inspect with resume
 google-indexer-cli --submit --inspect --resume --limit 150
-
-# Check current progress
 google-indexer-cli --status
-
-# Retry only failures
 google-indexer-cli --retry-errors --submit
-
-# Export problematic URLs
 google-indexer-cli --export-failed failed.txt
-
-# Use MySQL for history (robust fallback)
 google-indexer-cli --history-backend mysql --submit --inspect --resume
 ```
 
 ## Configuration
 
-All behavior is controlled via command line (recommended) or environment variables.
+All options via CLI flags (recommended) or environment variables.
 
-Key options:
-- `--site` — Your website base URL
-- `--sitemap` — Sitemap location (defaults to `{site}/sitemap.xml`)
-- `--history-backend` — `sqlite` | `json` | `mysql`
-- `--limit` — Safety limit per run (important for quotas)
-
-See `.env.example` for environment variable usage.
+Key flags:
+- `--site` — Your site URL
+- `--sitemap` — Sitemap URL (defaults to site/sitemap.xml)
+- `--history-backend` — sqlite (default) | json | mysql
+- `--limit` — Max URLs this run (good for quotas)
 
 ## Requirements
 
-- Python 3
+- Python ≥ 3.9
 - `requests`
-- `openssl` in your PATH (for JWT signing — the lightweight method)
-- Optional: `pymysql` (only if using `--history-backend mysql`)
+- `openssl` (for JWT)
+- Optional: `pymysql` for MySQL backend
 
-## Google Setup (one time)
+## Google Setup
 
-1. Create a Service Account in Google Cloud Console
-2. Enable the **Indexing API**
-3. Download the JSON key file
-4. In Google Search Console, add the service account email as an **Owner** (or at least full access) for the property
+1. Create Service Account in Google Cloud
+2. Enable **Indexing API**
+3. Download JSON key
+4. Add the service account as Owner in Search Console
 
-## History Backends
+## Why This Tool?
 
-The tool is designed so you can safely stop and resume days later.
-
-**sqlite** (recommended default)
-```bash
-python seo_indexer.py --history-backend sqlite --resume --submit --inspect
-```
-
-**mysql** (great for teams or when you want a real database)
-```bash
-python seo_indexer.py \
-  --history-backend mysql \
-  --mysql-database seo_indexer \
-  --mysql-user youruser \
-  --resume --submit
-```
-
-The tool will automatically create the necessary tables (`indexer_jobs` and quota tracking).
-
-## Example: Using with Any Site (Django, Static, etc.)
-
-After adding new content and regenerating your sitemap:
-
-```bash
-python seo_indexer.py \
-  --site https://yourdomain.com \
-  --submit --inspect --resume --limit 100
-```
-
-This works for Django sites, static generators, WordPress, etc. — anything with a public sitemap.
-
-## Why This Project?
-
-- Many people rely on auto-indexing signals that are slow or unreliable.
-- This gives you **direct control** with excellent observability and resume.
-- Runs anywhere (your laptop, CI, small server) — ideal when you don't want indexing logic inside your web app.
-- Clean, MIT-licensed, and designed to be reusable for any public website.
+Simple, reliable control over Google indexing. Great when you publish via AI (Claude, Gemini, etc.) and want new pages discovered fast.
 
 ## License
 
-MIT — see [LICENSE](LICENSE) file.
+MIT — see [LICENSE](LICENSE).
 
-Contributions and improvements are welcome!
-
-## Portfolio Note
-
-This tool was created as a practical, production-grade open source utility. It demonstrates:
-- Clean architecture with pluggable backends
-- Careful handling of external APIs and quotas
-- Good CLI UX and documentation
-- Real-world usefulness for SEO automation
-
-Feel free to link to it in your portfolio.
-   ```bash
-   python manage.py import_json_content --dir /path/to/json-batches/ --progress
-   ```
+Contributions welcome!
 2. (Optional) mysqldump + restore to prod.
 3. Run indexer from your laptop:
    ```bash
