@@ -22,15 +22,15 @@ Features:
 - Minimal dependencies (requests + openssl)
 
 Usage examples (generic):
-    # After pip install .
-    google-indexer --site https://example.com --sitemap https://example.com/sitemap.xml --submit
+    # After `pip install git+https://github.com/cleven12/google-indexer-cli.git`
+    google-indexer-cli --site https://example.com --sitemap https://example.com/sitemap.xml --submit
 
-    google-indexer --site https://example.com --url /blog/post-123 --submit --inspect
-    google-indexer --resume --submit --inspect --limit 200
-    google-indexer --status
-    google-indexer --history-backend mysql --submit --inspect
+    google-indexer-cli --site https://example.com --url /blog/post-123 --submit --inspect
+    google-indexer-cli --resume --submit --inspect --limit 200
+    google-indexer-cli --status
+    google-indexer-cli --history-backend mysql --submit --inspect
 
-    # Or run directly:
+    # Or run directly from source:
     python seo_indexer.py --site https://example.com ...
 
 Requirements:
@@ -54,6 +54,8 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, date
 from pathlib import Path
 from urllib.parse import urljoin
+
+__version__ = "0.1.0"
 
 try:
     import requests
@@ -588,6 +590,7 @@ def main():
     # Extra actions
     parser.add_argument("--status", action="store_true", help="Show current stats and exit")
     parser.add_argument("--export-failed", help="Export failed/quota URLs to file and exit")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     args = parser.parse_args()
 
     site = args.site.rstrip("/")
