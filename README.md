@@ -1,4 +1,6 @@
-# SEO Page Indexer
+# google-indexer-cli
+
+A lightweight, reusable CLI tool for manually controlling Google Indexing API submissions and Search Console URL inspections.
 
 A lightweight, reusable CLI tool for manually controlling Google Indexing API submissions and Search Console URL inspections.
 
@@ -35,13 +37,13 @@ pip install .
 pip install git+https://github.com/cleven12/google-indexer-cli.git
 ```
 
-After installation, the command `google-indexer` becomes available globally.
+After installation, the command `google-indexer-cli` becomes available globally.
 
 ### Basic Usage
 
 ```bash
 # Basic usage (replace with your site)
-google-indexer \
+google-indexer-cli \
   --site https://example.com \
   --sitemap https://example.com/sitemap.xml \
   --service-account service_account.json \
@@ -58,19 +60,19 @@ python seo_indexer.py --site https://example.com ...
 
 ```bash
 # Full submit + inspect with resume
-google-indexer --submit --inspect --resume --limit 150
+google-indexer-cli --submit --inspect --resume --limit 150
 
 # Check current progress
-google-indexer --status
+google-indexer-cli --status
 
 # Retry only failures
-google-indexer --retry-errors --submit
+google-indexer-cli --retry-errors --submit
 
 # Export problematic URLs
-google-indexer --export-failed failed.txt
+google-indexer-cli --export-failed failed.txt
 
 # Use MySQL for history (robust fallback)
-google-indexer --history-backend mysql --submit --inspect --resume
+google-indexer-cli --history-backend mysql --submit --inspect --resume
 ```
 
 ## Configuration
