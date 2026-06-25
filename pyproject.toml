@@ -1,0 +1,71 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "google-indexer-cli"
+version = "0.1.0"
+description = "Lightweight CLI tool for Google Indexing API + Search Console inspections with robust resume support"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+  {name = "Cleven", email = "cleven@example.com"}
+]
+maintainers = [
+  {name = "Cleven"}
+]
+keywords = [
+  "seo",
+  "google-indexing",
+  "search-console",
+  "cli",
+  "sitemap",
+  "indexing-api",
+  "python",
+  "open-source"
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Internet :: WWW/HTTP :: Indexing/Search",
+  "Topic :: Utilities",
+]
+requires-python = ">=3.8"
+dependencies = [
+  "requests>=2.32.0",
+]
+
+[project.optional-dependencies]
+mysql = [
+  "pymysql>=1.1.0",
+]
+
+[project.scripts]
+google-indexer = "seo_indexer:main"
+
+[project.urls]
+Homepage = "https://github.com/cleven12/google-indexer-cli"
+Repository = "https://github.com/cleven12/google-indexer-cli"
+Issues = "https://github.com/cleven12/google-indexer-cli/issues"
+Changelog = "https://github.com/cleven12/google-indexer-cli/releases"
+
+[tool.setuptools]
+py-modules = ["seo_indexer"]
+
+[tool.setuptools.package-data]
+"*" = ["*.md", "*.txt", "LICENSE"]
+
+[tool.black]
+line-length = 88
+
+[tool.isort]
+profile = "black"

@@ -25,35 +25,52 @@ Built with proven lightweight techniques (openssl JWT, no heavy Google SDKs).
 
 ## Quick Start
 
-```bash
-# Install
-pip install requests
+### Installation
 
+```bash
+# From source (recommended while in development)
+pip install .
+
+# Or directly
+pip install git+https://github.com/cleven12/google-indexer-cli.git
+```
+
+After installation, the command `google-indexer` becomes available globally.
+
+### Basic Usage
+
+```bash
 # Basic usage (replace with your site)
-python seo_indexer.py \
+google-indexer \
   --site https://example.com \
   --sitemap https://example.com/sitemap.xml \
   --service-account service_account.json \
   --submit --inspect --resume
 ```
 
+You can still run directly with Python:
+
+```bash
+python seo_indexer.py --site https://example.com ...
+```
+
 ### Common Commands
 
 ```bash
 # Full submit + inspect with resume
-python seo_indexer.py --submit --inspect --resume --limit 150
+google-indexer --submit --inspect --resume --limit 150
 
 # Check current progress
-python seo_indexer.py --status
+google-indexer --status
 
 # Retry only failures
-python seo_indexer.py --retry-errors --submit
+google-indexer --retry-errors --submit
 
 # Export problematic URLs
-python seo_indexer.py --export-failed failed.txt
+google-indexer --export-failed failed.txt
 
 # Use MySQL for history (robust fallback)
-python seo_indexer.py --history-backend mysql --submit --inspect --resume
+google-indexer --history-backend mysql --submit --inspect --resume
 ```
 
 ## Configuration
