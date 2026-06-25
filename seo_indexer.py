@@ -22,11 +22,16 @@ Features:
 - Minimal dependencies (requests + openssl)
 
 Usage examples (generic):
-    python seo_indexer.py --site https://example.com --sitemap https://example.com/sitemap.xml --submit
-    python seo_indexer.py --site https://example.com --url /blog/post-123 --submit --inspect
-    python seo_indexer.py --resume --submit --inspect --limit 200
-    python seo_indexer.py --status
-    python seo_indexer.py --history-backend mysql --submit --inspect
+    # After pip install .
+    google-indexer --site https://example.com --sitemap https://example.com/sitemap.xml --submit
+
+    google-indexer --site https://example.com --url /blog/post-123 --submit --inspect
+    google-indexer --resume --submit --inspect --limit 200
+    google-indexer --status
+    google-indexer --history-backend mysql --submit --inspect
+
+    # Or run directly:
+    python seo_indexer.py --site https://example.com ...
 
 Requirements:
     pip install requests
