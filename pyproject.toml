@@ -5,11 +5,11 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "google-indexer-cli"
 version = "0.2.0"
-description = "Tour-operator bulk Google Indexing + Search Console CLI (sitemap queues, resume, quota). Defaults use example.com."
+description = "Tour-operator bulk Google Indexing + Search Console CLI (sitemap queues, resume, quota). Defaults use visitkili.com."
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
-  {name = "Cleven", email = "cleven@example.com"}
+  {name = "Cleven", email = "cleven@visitkili.com"}
 ]
 maintainers = [
   {name = "Cleven"}

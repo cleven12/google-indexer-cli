@@ -5,7 +5,7 @@ Thanks for helping improve a small, focused tool for **tour-operator bulk Google
 ## Ground rules
 
 - Keep this repo **indexing-only** (Google Indexing API + Search Console). No unrelated product stacks.
-- Public examples must use **`example.com`** (or other RFCs). Do not commit private client domains, keys, or `.env`.
+- Public examples must use **`example.com.com`** (or other RFCs). Do not commit private client domains, keys, or `.env`.
 - Prefer small, reviewable PRs over large multi-purpose changes.
 
 ## Dev setup

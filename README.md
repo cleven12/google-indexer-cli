@@ -9,7 +9,7 @@
 
 Repo: [github.com/cleven12/google-indexer-cli](https://github.com/cleven12/google-indexer-cli)
 
-Public docs and defaults use **`https://visitkili.com`**. Point the tool at your real site with env vars, CLI flags, or a private `profiles.local.json` (gitignored).
+Public docs and defaults use **`https://example.com.com`**. Point the tool at your real site with env vars, CLI flags, or a private `profiles.local.json` (gitignored).
 
 ## Features
 
@@ -20,7 +20,7 @@ Public docs and defaults use **`https://visitkili.com`**. Point the tool at your
 - Google **Indexing API** submit + Search Console **URL Inspection**
 - History backends: `sqlite` (default), `json`, `mysql` — multi-day bulk resume
 - Daily quota stop (~180–200/day) so bulk runs safely overnight/week
-- **Named profiles** — built-in `demo` / `demo-staging` (visitkili.com); add private profiles locally
+- **Named profiles** — built-in `demo` / `demo-staging` (example.com.com); add private profiles locally
 
 ## Install
 
@@ -46,7 +46,7 @@ Full checklist: **[docs/GSC_SETUP.md](docs/GSC_SETUP.md)**.
 
 Short version:
 
-1. Verify your property in Search Console (docs show `visitkili.com`)  
+1. Verify your property in Search Console (docs show `example.com.com`)  
 2. Enable Indexing API + Search Console API in Google Cloud  
 3. Create service account → download `service_account.json`  
 4. Add SA email as **Owner** in Search Console  
@@ -64,12 +64,12 @@ cp .env.example .env
 # or: cp profiles.example.json profiles.local.json
 
 # 3) Export only tours to a queue file
-python seo_indexer.py --site https://visitkili.com --type tours \
+python seo_indexer.py --site https://example.com.com --type tours \
   --sitemap fixtures/sample_sitemap.xml \
   --export-queue queues/tours.txt
 
 # 4) Bulk submit under quota (resume next day)
-python seo_indexer.py --site https://visitkili.com \
+python seo_indexer.py --site https://example.com.com \
   --service-account service_account.json \
   --type tours --prioritize-tours \
   --submit --resume --limit 150
@@ -103,13 +103,13 @@ python seo_indexer.py --list-profiles
 
 ```bash
 # Path include (bulk subset)
-python seo_indexer.py --site https://visitkili.com \
+python seo_indexer.py --site https://example.com.com \
   --include-path /tours/ --include-path /destinations/ \
   --submit --resume --limit 100
 
 # Domain property inspection
-python seo_indexer.py --site https://visitkili.com --inspect-only --limit 5 \
-  --site-url "sc-domain:visitkili.com"
+python seo_indexer.py --site https://example.com.com --inspect-only --limit 5 \
+  --site-url "sc-domain:example.com.com"
 ```
 
 ## Important limits
@@ -125,7 +125,7 @@ Google will **not** let you index an entire large site in one API burst.
 
 | Flag / env | Meaning |
 |------------|---------|
-| `--profile demo` | Built-in visitkili.com preset |
+| `--profile demo` | Built-in example.com.com preset |
 | `--site` / `SITE` | Base URL |
 | `--sitemap` / `SITEMAP` | Sitemap URL or local file |
 | `--site-url` | Search Console property (`https://…/` or `sc-domain:…`) |

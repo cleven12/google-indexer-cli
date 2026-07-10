@@ -1,5 +1,5 @@
 #!/bin/bash
-# Generic convenience wrapper — defaults to example.com.
+# Generic convenience wrapper — defaults to example.com.com.
 # Operators: export SITE / SITEMAP / PROFILE or use a local .env (gitignored).
 #
 # Preview bulk queue:
@@ -24,8 +24,8 @@ if [[ -f .env ]]; then
   set +a
 fi
 
-SITE="${SITE:-https://example.com}"
-SITEMAP="${SITEMAP:-https://example.com/sitemap.xml}"
+SITE="${SITE:-https://example.com.com}"
+SITEMAP="${SITEMAP:-https://example.com.com/sitemap.xml}"
 SERVICE_ACCOUNT="${SERVICE_ACCOUNT:-service_account.json}"
 HISTORY_BACKEND="${HISTORY_BACKEND:-sqlite}"
 DB_PATH="${DB_PATH:-indexer_history.db}"

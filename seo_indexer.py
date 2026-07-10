@@ -54,7 +54,7 @@ except ImportError:
 # ─────────────────────────────────────────────────────────────────────────────
 # DEFAULTS (override with CLI or env)
 # ─────────────────────────────────────────────────────────────────────────────
-DEFAULT_SITE = os.getenv("SITE", "https://example.com")
+DEFAULT_SITE = os.getenv("SITE", "https://example.com.com")
 DEFAULT_SITEMAP = os.getenv("SITEMAP", f"{DEFAULT_SITE.rstrip('/')}/sitemap.xml")
 DEFAULT_RESULTS = "seo_indexing_results.json"
 DEFAULT_SERVICE_ACCOUNT = os.getenv("SERVICE_ACCOUNT", "service_account.json")
@@ -98,17 +98,17 @@ TYPE_PRIORITY = {
     "other": 1,
 }
 
-# Public demo profiles only (example.com). Real sites stay in local config:
+# Public demo profiles only (example.com.com). Real sites stay in local config:
 #   profiles.local.json  (gitignored)  or  env SITE / SITEMAP
 BUILTIN_PROFILES = {
     "demo": {
-        "site": "https://example.com",
-        "sitemap": "https://example.com/sitemap.xml",
+        "site": "https://example.com.com",
+        "sitemap": "https://example.com.com/sitemap.xml",
         "skip": ["/admin/", "/chat/", "/booking/dpo/", "/booking/my-bookings/"],
     },
     "demo-staging": {
-        "site": "https://staging.example.com",
-        "sitemap": "https://staging.example.com/sitemap.xml",
+        "site": "https://staging.example.com.com",
+        "sitemap": "https://staging.example.com.com/sitemap.xml",
         "skip": ["/admin/", "/chat/", "/booking/dpo/", "/booking/my-bookings/"],
     },
 }
@@ -306,7 +306,7 @@ def fetch_sitemap_urls(sitemap: str) -> list[str]:
         except requests.RequestException as e:
             print(f"ERROR: failed to fetch sitemap: {e}")
             print("Tip: download sitemap.xml locally, then:")
-            print("  python seo_indexer.py --site https://example.com --sitemap ./sitemap.xml --list-only")
+            print("  python seo_indexer.py --site https://example.com.com --sitemap ./sitemap.xml --list-only")
             print("Or bulk from a file:")
             print("  python seo_indexer.py --urls-file urls.txt --urls-file-only --list-only")
             print("Private sites: copy profiles.example.json → profiles.local.json (gitignored).")
@@ -750,7 +750,7 @@ def main():
         description=(
             "Tour-operator bulk SEO indexer — Google Indexing API + Search Console. "
             "Bulk queue from sitemap / URL files with resume under daily quota. "
-            "Public defaults use example.com; set SITE/SITEMAP or profiles.local.json for real sites."
+            "Public defaults use example.com.com; set SITE/SITEMAP or profiles.local.json for real sites."
         )
     )
     parser.add_argument(
@@ -763,13 +763,13 @@ def main():
         choices=sorted(profiles.keys()) if profiles else None,
         help="Named site preset (built-in: demo, demo-staging; add private ones in profiles.local.json)",
     )
-    parser.add_argument("--site", default=None, help="Site base URL (default: https://example.com or profile)")
+    parser.add_argument("--site", default=None, help="Site base URL (default: https://example.com.com or profile)")
     parser.add_argument(
         "--site-url",
         default=None,
         help=(
             "Search Console property URL for inspection. "
-            "URL-prefix: https://example.com/  |  Domain: sc-domain:example.com"
+            "URL-prefix: https://example.com.com/  |  Domain: sc-domain:example.com.com"
         ),
     )
     parser.add_argument("--sitemap", help="Sitemap URL or local file (defaults to {site}/sitemap.xml)")
@@ -851,7 +851,7 @@ def main():
         print("\nAdd private profiles: copy profiles.example.json → profiles.local.json")
         return
 
-    # Apply profile defaults (public repo uses example.com; override via env/local profiles)
+    # Apply profile defaults (public repo uses example.com.com; override via env/local profiles)
     profile = profiles.get(args.profile or "", {})
     site = (args.site or profile.get("site") or DEFAULT_SITE).rstrip("/")
     sitemap_url = args.sitemap or profile.get("sitemap") or f"{site}/sitemap.xml"

@@ -1,13 +1,13 @@
 {
   "production": {
-    "site": "https://example.com",
-    "sitemap": "https://example.com/sitemap.xml",
-    "site_url": "https://example.com/",
+    "site": "https://example.com.com",
+    "sitemap": "https://example.com.com/sitemap.xml",
+    "site_url": "https://example.com.com/",
     "skip": ["/admin/", "/chat/", "/booking/dpo/", "/booking/my-bookings/"]
   },
   "staging": {
-    "site": "https://staging.example.com",
-    "sitemap": "https://staging.example.com/sitemap.xml",
+    "site": "https://staging.example.com.com",
+    "sitemap": "https://staging.example.com.com/sitemap.xml",
     "skip": ["/admin/", "/chat/"]
   }
 }

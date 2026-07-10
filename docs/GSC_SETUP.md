@@ -2,14 +2,14 @@
 
 Do this **once** before bulk indexing with `google-indexer-cli`.
 
-Public docs use **`example.com`**. Replace with your real domain in local config only
+Public docs use **`example.com.com`**. Replace with your real domain in local config only
 (`.env`, `profiles.local.json`) — never commit production domains if you prefer privacy.
 
 ## Why you need it
 
 | Piece | Role |
 |--------|------|
-| **Search Console property** | Proves you own the domain (e.g. `example.com`) |
+| **Search Console property** | Proves you own the domain (e.g. `example.com.com`) |
 | **Service account** | Machine identity the CLI uses (JSON key) |
 | **Indexing API** | `URL_UPDATED` / `URL_DELETED` notifications |
 | **Webmasters API** | URL Inspection (coverage, last crawl) |
@@ -22,10 +22,10 @@ Official note: Google documents the Indexing API mainly for **JobPosting** and *
 
 1. Open [Google Search Console](https://search.google.com/search-console)
 2. Add property:
-   - **Domain** property: `example.com` (needs DNS TXT — best with Cloudflare), **or**
-   - **URL-prefix**: `https://example.com/`
+   - **Domain** property: `example.com.com` (needs DNS TXT — best with Cloudflare), **or**
+   - **URL-prefix**: `https://example.com.com/`
 3. Verify ownership
-4. Submit sitemap: `https://example.com/sitemap.xml`
+4. Submit sitemap: `https://example.com.com/sitemap.xml`
 
 ### 2. Google Cloud project
 
@@ -71,7 +71,7 @@ python seo_indexer.py --profile demo --sitemap fixtures/sample_sitemap.xml --lis
 
 # Submit a small batch (needs service_account.json)
 python seo_indexer.py \
-  --site https://example.com \
+  --site https://example.com.com \
   --service-account service_account.json \
   --type tours \
   --prioritize-tours \
@@ -84,8 +84,8 @@ If you see **403**, the SA is not Owner on the Search Console property.
 For **URL Inspection** against a Domain property:
 
 ```bash
-python seo_indexer.py --site https://example.com --inspect-only --limit 3 \
-  --site-url "sc-domain:example.com"
+python seo_indexer.py --site https://example.com.com --inspect-only --limit 3 \
+  --site-url "sc-domain:example.com.com"
 ```
 
 ## Quotas (plan bulk around this)
@@ -99,13 +99,13 @@ Bulk “all pages at once” for a large tour site is **multi-day**:
 
 ```bash
 # Day 1 — commercial tours
-python seo_indexer.py --site https://example.com --type tours --submit --resume --limit 150
+python seo_indexer.py --site https://example.com.com --type tours --submit --resume --limit 150
 # Day 2 — destinations
-python seo_indexer.py --site https://example.com --type destinations --submit --resume --limit 150
+python seo_indexer.py --site https://example.com.com --type destinations --submit --resume --limit 150
 # Day 3 — guides + rest
-python seo_indexer.py --site https://example.com --type guides --type articles --submit --resume --limit 150
+python seo_indexer.py --site https://example.com.com --type guides --type articles --submit --resume --limit 150
 # Catch-up
-python seo_indexer.py --site https://example.com --submit --resume --limit 150
+python seo_indexer.py --site https://example.com.com --submit --resume --limit 150
 ```
 
 ## Multi-client tour operators
