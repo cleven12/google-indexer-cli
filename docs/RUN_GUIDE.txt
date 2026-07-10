@@ -1,0 +1,361 @@
+================================================================================
+  google-indexer-cli  —  RUN GUIDE (tour-operator bulk Google indexing)
+================================================================================
+
+Public docs use example.com. Point at your real site with:
+  - .env          (copy from .env.example)          [gitignored]
+  - profiles.local.json  (copy from profiles.example.json)  [gitignored]
+  - or CLI flags: --site / --sitemap / --profile
+
+Never commit: service_account.json, .env, profiles.local.json
+
+
+--------------------------------------------------------------------------------
+0) ONE-TIME SETUP
+--------------------------------------------------------------------------------
+
+1. Search Console: verify property (URL-prefix or Domain).
+2. Google Cloud: enable
+     - Web Search Indexing API
+     - Google Search Console API
+3. Create service account → download JSON as service_account.json
+4. Add SA email as OWNER on the Search Console property.
+5. Full checklist: docs/GSC_SETUP.md
+
+Config options:
+
+  # A) env
+  cp .env.example .env
+  # edit SITE= and SITEMAP=
+
+  # B) private profiles
+  cp profiles.example.json profiles.local.json
+  # edit production / staging URLs
+
+  python3 seo_indexer.py --list-profiles
+
+
+--------------------------------------------------------------------------------
+1) PREVIEW (no Google API, no service account needed)
+--------------------------------------------------------------------------------
+
+  # Offline fixture
+  python3 seo_indexer.py --profile demo \
+    --sitemap fixtures/sample_sitemap.xml --list-only --limit 30
+
+  # Your site (env / profile)
+  ./run.sh --list-only --limit 50
+
+  python3 seo_indexer.py --profile production --list-only --limit 50
+
+  # Only tours in the queue
+  ./run.sh --type tours --list-only --limit 30
+
+  # Export a queue file for later
+  ./run.sh --type tours --export-queue queues/tours.txt
+
+  # Content mix + classification labels
+  python3 seo_indexer.py --site https://example.com \
+    --sitemap fixtures/sample_sitemap.xml --list-only
+
+
+--------------------------------------------------------------------------------
+2) SUBMIT ALL PAGES (multi-day — Google ~150–200 URL_UPDATED / day)
+--------------------------------------------------------------------------------
+
+You cannot index a large site in one run. Use --limit + --resume every day.
+
+  # Day 1
+  ./run.sh --submit --resume --limit 150
+
+  # Day 2, 3, … same command until status shows queue drained
+  ./run.sh --submit --resume --limit 150
+
+  # Progress
+  ./run.sh --status
+
+--resume skips URLs already marked submitted in indexer_history.db
+(local history — not “already live in Google”).
+
+
+Smarter order (high-value commercial pages first):
+
+  # Day 1 — tours
+  ./run.sh --type tours --submit --resume --limit 150
+
+  # Day 2 — destinations
+  ./run.sh --type destinations --submit --resume --limit 150
+
+  # Day 3 — guides + articles
+  ./run.sh --type guides --type articles --submit --resume --limit 150
+
+  # Day 4+ — everything still pending
+  ./run.sh --submit --resume --limit 150
+
+
+Without wrapper (explicit flags):
+
+  python3 seo_indexer.py \
+    --profile production \
+    --service-account service_account.json \
+    --type tours --prioritize-tours \
+    --submit --resume --limit 150
+
+
+--------------------------------------------------------------------------------
+3) SUBMIT ONLY PAGES THAT ARE NOT INDEXED
+--------------------------------------------------------------------------------
+
+IMPORTANT:
+  Submit  = you asked Google to crawl (Indexing API)
+  Indexed = Google actually has the page in the index
+
+This tool’s --resume only tracks YOUR submits in the local DB.
+For “not indexed by Google”, use Search Console (recommended) or inspect.
+
+
+--- 3A) Recommended: GSC export → file → submit ---
+
+  1. Google Search Console → Pages / indexing report
+  2. Open “not indexed” reasons (e.g. Discovered / Crawled – currently not indexed)
+  3. Copy or export URLs into:  queues/not_indexed.txt
+     (one URL per line; # comments ok)
+
+  4. Submit only that list:
+
+  python3 seo_indexer.py \
+    --profile production \
+    --urls-file queues/not_indexed.txt \
+    --urls-file-only \
+    --submit --resume \
+    --limit 150
+
+  # Next day for remaining lines still not in history
+  python3 seo_indexer.py \
+    --profile production \
+    --urls-file queues/not_indexed.txt \
+    --urls-file-only \
+    --submit --resume \
+    --limit 150
+
+
+--- 3B) Spot-check coverage (URL Inspection — limited quota) ---
+
+  # Domain property
+  python3 seo_indexer.py \
+    --profile production \
+    --type tours \
+    --inspect-only \
+    --limit 10 \
+    --site-url "sc-domain:example.com"
+
+  # URL-prefix property (default is https://example.com/)
+  python3 seo_indexer.py \
+    --site https://example.com \
+    --url /tours/some-tour \
+    --inspect-only
+
+  Do NOT inspect thousands of URLs in one go — use sparingly.
+
+
+--- 3C) Submit + inspect a small batch ---
+
+  ./run.sh --type tours --submit --inspect --resume --limit 20
+
+
+--- 3D) Single important URL ---
+
+  python3 seo_indexer.py \
+    --profile production \
+    --url /tours/flagship-product \
+    --submit
+
+  # or full URL
+  python3 seo_indexer.py \
+    --site https://example.com \
+    --url https://example.com/tours/flagship-product \
+    --submit
+
+
+--------------------------------------------------------------------------------
+4) BULK FROM A FILE (CMS export, hand list, GSC export)
+--------------------------------------------------------------------------------
+
+  # File only (ignore sitemap)
+  python3 seo_indexer.py \
+    --site https://example.com \
+    --urls-file queues/new_pages.txt \
+    --urls-file-only \
+    --list-only
+
+  python3 seo_indexer.py \
+    --site https://example.com \
+    --urls-file queues/new_pages.txt \
+    --urls-file-only \
+    --submit --resume --limit 150
+
+  # Sitemap + extra file merged
+  python3 seo_indexer.py \
+    --site https://example.com \
+    --sitemap https://example.com/sitemap.xml \
+    --urls-file queues/extra.txt \
+    --submit --resume --limit 100
+
+
+--------------------------------------------------------------------------------
+5) FILTERS (narrow the queue)
+--------------------------------------------------------------------------------
+
+  --type tours
+  --type destinations
+  --type guides
+  --type articles
+  --type groups
+  --type static
+  --type other
+
+  # Repeatable
+  ./run.sh --type tours --type destinations --list-only
+
+  # Path substring
+  ./run.sh --include-path /tours/ --include-path /destinations/ --list-only
+
+  # Extra skips (on top of profile skips)
+  ./run.sh --skip /tag/ --skip /search --list-only
+
+  # Priority: tours → destinations → guides → … first
+  ./run.sh --prioritize-tours --list-only
+  # (./run.sh already passes --prioritize-tours)
+
+
+--------------------------------------------------------------------------------
+6) RETRY / STATUS / FAILURES
+--------------------------------------------------------------------------------
+
+  ./run.sh --status
+
+  # Export failed + quota-stopped URLs
+  ./run.sh --export-failed queues/failed.txt
+
+  # Retry only failures
+  ./run.sh --retry-errors --submit --limit 50
+
+  # After quota stop, wait until next day, then:
+  ./run.sh --submit --resume --limit 150
+
+
+--------------------------------------------------------------------------------
+7) LOCAL SITEMAP (if live sitemap is slow / blocked)
+--------------------------------------------------------------------------------
+
+  curl -o sitemap.xml https://example.com/sitemap.xml
+
+  python3 seo_indexer.py \
+    --profile production \
+    --sitemap ./sitemap.xml \
+    --list-only --limit 30
+
+  python3 seo_indexer.py \
+    --profile production \
+    --sitemap ./sitemap.xml \
+    --submit --resume --limit 150
+
+
+--------------------------------------------------------------------------------
+8) MULTI-CLIENT / MULTI-SITE
+--------------------------------------------------------------------------------
+
+Separate history DB per site so resume does not mix clients:
+
+  python3 seo_indexer.py \
+    --site https://client-a.example \
+    --db-path history_client_a.db \
+    --submit --resume --limit 100
+
+  python3 seo_indexer.py \
+    --site https://client-b.example \
+    --db-path history_client_b.db \
+    --submit --resume --limit 100
+
+
+--------------------------------------------------------------------------------
+9) QUOTAS & LIMITS (plan around these)
+--------------------------------------------------------------------------------
+
+  Indexing API URL_UPDATED     ~200 / day / site   → use --limit 150
+  URL Inspection               separate quota      → small samples only
+  Submit ≠ Indexed             Google may take days; not guaranteed
+  Primary discovery            keep sitemap.xml healthy in GSC
+  Official API scope           JobPosting / BroadcastEvent; still used for
+                               high-value URLs by many operators — don’t spam
+
+
+--------------------------------------------------------------------------------
+10) CHEAT SHEET
+--------------------------------------------------------------------------------
+
+  Goal                              Command idea
+  --------------------------------  ------------------------------------------
+  Preview queue                     ./run.sh --list-only --limit 50
+  All pages multi-day               ./run.sh --submit --resume --limit 150
+  Tours only                        ./run.sh --type tours --submit --resume --limit 150
+  Not-indexed list from GSC         --urls-file queues/not_indexed.txt --urls-file-only --submit --resume --limit 150
+  Export tours queue                ./run.sh --type tours --export-queue queues/tours.txt
+  Status / quota used today         ./run.sh --status
+  Retry failed                      ./run.sh --retry-errors --submit --limit 50
+  One URL                           --url /path --submit
+  Inspect sample                    --inspect-only --limit 10
+  List profiles                     python3 seo_indexer.py --list-profiles
+
+
+--------------------------------------------------------------------------------
+11) WRAPPER (./run.sh)
+--------------------------------------------------------------------------------
+
+Defaults (override with .env or env vars):
+
+  SITE=https://example.com
+  SITEMAP=https://example.com/sitemap.xml
+  SERVICE_ACCOUNT=service_account.json
+  PROFILE=demo
+  HISTORY_BACKEND=sqlite
+  DB_PATH=indexer_history.db
+
+Always passes: --prioritize-tours
+
+Examples:
+
+  ./run.sh --list-only --limit 20
+  ./run.sh --type tours --submit --resume --limit 100
+  ./run.sh --status
+  ./run.sh --export-failed failed.txt
+
+
+--------------------------------------------------------------------------------
+12) MENTAL MODEL
+--------------------------------------------------------------------------------
+
+  sitemap  and/or  urls-file
+            |
+            v
+  filters (--type, --include-path, --skip)
+            |
+            v
+  prioritize (tours first if enabled)
+            |
+            v
+  --resume  → drop URLs already submitted/inspected in local history
+            |
+            v
+  --limit N → stop after N URLs this run
+            |
+            v
+  Indexing API  (request crawl)   and/or   URL Inspection (coverage check)
+            |
+            v
+  Google decides over time whether the page is indexed
+
+
+================================================================================
+  More: README.md  |  docs/GSC_SETUP.md  |  CONTRIBUTING.md
+================================================================================
