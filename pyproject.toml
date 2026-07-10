@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "google-indexer-cli"
-version = "0.1.0"
-description = "Lightweight CLI tool for Google Indexing API + Search Console inspections with robust resume support"
+version = "0.2.0"
+description = "Tour-operator bulk Google Indexing + Search Console CLI (sitemap queues, resume, quota). Defaults use example.com."
 readme = "README.md"
 license = {text = "MIT"}
 authors = [

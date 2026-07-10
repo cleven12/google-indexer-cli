@@ -1,23 +1,42 @@
 #!/bin/bash
-# Generic convenience wrapper for any site
+# Generic convenience wrapper — defaults to example.com.
+# Operators: export SITE / SITEMAP / PROFILE or use a local .env (gitignored).
 #
-# Usage (edit the values below or override with arguments):
-#   ./run.sh --submit --inspect --resume --limit 150
+# Preview bulk queue:
+#   ./run.sh --list-only --limit 30
 #
-# MySQL history backend example:
-#   ./run.sh --submit --inspect --resume --history-backend mysql \
-#            --mysql-database my_indexer --mysql-user myuser
+# Bulk tours under daily quota:
+#   ./run.sh --type tours --submit --resume --limit 150
 #
-# Other useful commands:
+# Status / failed:
 #   ./run.sh --status
 #   ./run.sh --export-failed failed.txt
-#   ./run.sh --retry-errors --submit
+#   ./run.sh --retry-errors --submit --limit 50
 
+set -euo pipefail
 cd "$(dirname "$0")"
 
-python3 seo_indexer.py \
-  --site https://example.com \
-  --sitemap https://example.com/sitemap.xml \
-  --service-account service_account.json \
-  --history-backend sqlite \
+# Load local .env if present (never commit real domains here)
+if [[ -f .env ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source .env
+  set +a
+fi
+
+SITE="${SITE:-https://example.com}"
+SITEMAP="${SITEMAP:-https://example.com/sitemap.xml}"
+SERVICE_ACCOUNT="${SERVICE_ACCOUNT:-service_account.json}"
+HISTORY_BACKEND="${HISTORY_BACKEND:-sqlite}"
+DB_PATH="${DB_PATH:-indexer_history.db}"
+PROFILE="${PROFILE:-demo}"
+
+exec python3 seo_indexer.py \
+  --profile "${PROFILE}" \
+  --site "${SITE}" \
+  --sitemap "${SITEMAP}" \
+  --service-account "${SERVICE_ACCOUNT}" \
+  --history-backend "${HISTORY_BACKEND}" \
+  --db-path "${DB_PATH}" \
+  --prioritize-tours \
   "$@"

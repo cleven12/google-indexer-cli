@@ -1,45 +1,24 @@
 #!/usr/bin/env python3
 """
-Generic SEO Page Indexer Tool
+Tour-operator SEO bulk indexer (Google Indexing API + Search Console).
 
-A reusable, standalone CLI tool for manually submitting URLs to the Google Indexing API
-and performing Search Console URL Inspections.
+Built for safari / trek / hotel operators who publish many pages at once
+(tours, destinations, trek guides, group departures) and need reliable
+bulk submit + resume under Google's daily quota.
 
-Built on proven lightweight algorithms:
-- JWT authentication using openssl (no heavy Google client libraries)
-- Recursive sitemap.xml parsing (supports sitemap index files)
-- Robust resume / retry with persistent history backends (sqlite, json, mysql)
-- Quota awareness and polite rate limiting
+Core design:
+- JWT auth via openssl (no heavy Google SDKs)
+- Recursive sitemap parsing (urlset + sitemap index)
+- Bulk URL sources: full sitemap, path filters, URL file lists
+- Tour-operator content prioritization (tours → destinations → guides…)
+- Persistent history (sqlite / json / mysql) for multi-day bulk runs
+- Daily quota awareness (Indexing API is typically ~200 URL_UPDATED/day)
 
-Designed to be 100% generic — works with any website that has a sitemap.
+Note: Google's Indexing API is officially scoped for JobPosting /
+BroadcastEvent pages; many operators still use it alongside sitemap +
+Search Console. Prefer gradual bulk (limit + resume) over spam bursts.
 
-Features:
-- Submit pages one-by-one via Google Indexing API
-- URL Inspection via Search Console (coverage, last crawl, indexing state, etc.)
-- Multiple history backends for reliable resume across runs
-- --resume, --retry-errors, --status, --export-failed, --dry-run
-- Fully configurable via CLI flags or environment
-- Minimal dependencies (requests + openssl)
-
-Usage examples (generic):
-    # After install
-    google-indexer --site https://example.com --sitemap https://example.com/sitemap.xml --submit
-    # (alias also works: google-indexer-cli)
-
-    google-indexer --site https://example.com --url /blog/post-123 --submit --inspect
-    google-indexer --resume --submit --inspect --limit 200
-    google-indexer --status
-    google-indexer --history-backend mysql --submit --inspect
-
-    # Or run directly from source:
-    python seo_indexer.py --site https://example.com ...
-
-Requirements:
-    pip install requests
-    # Optional for MySQL history backend:
-    # pip install pymysql
-
-    openssl must be available in PATH for JWT signing.
+Setup: docs/GSC_SETUP.md
 """
 
 import argparse
@@ -54,9 +33,10 @@ import time
 import xml.etree.ElementTree as ET
 from datetime import datetime, date
 from pathlib import Path
-from urllib.parse import urljoin
+from typing import Optional
+from urllib.parse import urljoin, urlparse
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 try:
     import requests
@@ -73,26 +53,185 @@ except ImportError:
 
 # ─────────────────────────────────────────────────────────────────────────────
 # DEFAULTS (override with CLI or env)
-# These are generic placeholders. Override with --site / --sitemap or env.
 # ─────────────────────────────────────────────────────────────────────────────
-DEFAULT_SITE = "https://example.com"
-DEFAULT_SITEMAP = f"{DEFAULT_SITE}/sitemap.xml"
+DEFAULT_SITE = os.getenv("SITE", "https://example.com")
+DEFAULT_SITEMAP = os.getenv("SITEMAP", f"{DEFAULT_SITE.rstrip('/')}/sitemap.xml")
 DEFAULT_RESULTS = "seo_indexing_results.json"
-DEFAULT_SERVICE_ACCOUNT = "service_account.json"
+DEFAULT_SERVICE_ACCOUNT = os.getenv("SERVICE_ACCOUNT", "service_account.json")
 
 INDEXING_API = "https://indexing.googleapis.com/v3/urlNotifications:publish"
 INSPECTION_API = "https://searchconsole.googleapis.com/v1/urlInspection/index:inspect"
 TOKEN_URI = "https://oauth2.googleapis.com/token"
 
-# Quotas (conservative)
-DAILY_QUOTA = 180
-DELAY_SECONDS = 0.25
+# Quotas (conservative — Indexing API is low; bulk = multi-day queue)
+DAILY_QUOTA = int(os.getenv("DAILY_QUOTA", "180"))
+DELAY_SECONDS = float(os.getenv("DELAY_SECONDS", "0.25"))
 MAX_RETRIES = 3
 RETRY_BACKOFF = [5, 15, 40]
 
 # History backends
 DEFAULT_HISTORY_BACKEND = "sqlite"
 DEFAULT_DB_PATH = "indexer_history.db"
+
+# ── Tour-operator content types (URL path heuristics) ───────────────────────
+# Used for bulk filtering and priority ordering when publishing packages.
+TOUR_OPERATOR_TYPES = {
+    "tours": ["/tours/"],
+    "destinations": ["/destinations/"],
+    "guides": ["/guides/", "/trek-guides/", "/trekking-guides/"],
+    "articles": ["/guides/articles/", "/blog/", "/articles/"],
+    "groups": ["/booking/groups/", "/groups/"],
+    "static": [
+        "/", "/about", "/contact", "/faq", "/reviews",
+        "/tours/search", "/tours/category",
+    ],
+}
+
+# Higher first when --prioritize-tours
+TYPE_PRIORITY = {
+    "tours": 10,
+    "destinations": 8,
+    "guides": 7,
+    "articles": 5,
+    "groups": 6,
+    "static": 3,
+    "other": 1,
+}
+
+# Public demo profiles only (example.com). Real sites stay in local config:
+#   profiles.local.json  (gitignored)  or  env SITE / SITEMAP
+BUILTIN_PROFILES = {
+    "demo": {
+        "site": "https://example.com",
+        "sitemap": "https://example.com/sitemap.xml",
+        "skip": ["/admin/", "/chat/", "/booking/dpo/", "/booking/my-bookings/"],
+    },
+    "demo-staging": {
+        "site": "https://staging.example.com",
+        "sitemap": "https://staging.example.com/sitemap.xml",
+        "skip": ["/admin/", "/chat/", "/booking/dpo/", "/booking/my-bookings/"],
+    },
+}
+
+DEFAULT_PROFILE_FILES = (
+    "profiles.local.json",  # private operator config (preferred)
+    "profiles.json",        # optional shared team file (still keep secrets out of git)
+)
+
+
+def load_profiles(extra_path: Optional[str] = None) -> dict:
+    """Merge built-in demo profiles with optional local JSON profile files."""
+    profiles = {k: dict(v) for k, v in BUILTIN_PROFILES.items()}
+    candidates = []
+    if extra_path:
+        candidates.append(Path(extra_path))
+    candidates.extend(Path(p) for p in DEFAULT_PROFILE_FILES)
+    for path in candidates:
+        if not path.exists():
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as e:
+            print(f"WARNING: could not load profiles from {path}: {e}")
+            continue
+        if not isinstance(data, dict):
+            print(f"WARNING: {path} must be a JSON object of name → config")
+            continue
+        for name, cfg in data.items():
+            if not isinstance(cfg, dict):
+                continue
+            base = profiles.get(name, {})
+            merged = {**base, **cfg}
+            if "skip" in cfg and isinstance(cfg["skip"], list):
+                merged["skip"] = list(cfg["skip"])
+            profiles[name] = merged
+        print(f"Loaded site profiles from {path} ({len(data)} entries)")
+    return profiles
+
+
+def classify_url(url: str) -> str:
+    """Map a URL to a tour-operator content bucket."""
+    path = urlparse(url).path or "/"
+    # More specific first
+    if "/guides/articles/" in path or "/blog/" in path or path.startswith("/articles/"):
+        return "articles"
+    if any(p in path for p in TOUR_OPERATOR_TYPES["guides"]):
+        return "guides"
+    if any(p in path for p in TOUR_OPERATOR_TYPES["destinations"]):
+        return "destinations"
+    if any(p in path for p in TOUR_OPERATOR_TYPES["groups"]):
+        return "groups"
+    if "/tours/" in path and "/tag/" not in path:
+        return "tours"
+    if "/tours/tag/" in path:
+        return "other"
+    # exact-ish static
+    bare = path.rstrip("/") or "/"
+    for static in TOUR_OPERATOR_TYPES["static"]:
+        if bare == static.rstrip("/") or bare == static:
+            return "static"
+    return "other"
+
+
+def load_urls_file(path: str) -> list[str]:
+    """Load bulk URLs from a text file (one URL per line; # comments ok)."""
+    p = Path(path)
+    if not p.exists():
+        print(f"ERROR: URLs file not found: {path}")
+        sys.exit(1)
+    urls = []
+    for line in p.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        urls.append(line.split()[0])
+    print(f"Loaded {len(urls)} URLs from {path}")
+    return urls
+
+
+def filter_by_types(urls: list[str], types: list[str]) -> list[str]:
+    wanted = {t.strip().lower() for t in types if t.strip()}
+    if not wanted:
+        return urls
+    unknown = wanted - set(TYPE_PRIORITY.keys())
+    if unknown:
+        print(f"WARNING: unknown --type values ignored: {sorted(unknown)}")
+    out = [u for u in urls if classify_url(u) in wanted]
+    print(f"Filtered by type {sorted(wanted)}: {len(out)} / {len(urls)}")
+    return out
+
+
+def filter_by_include_paths(urls: list[str], includes: list[str]) -> list[str]:
+    if not includes:
+        return urls
+    out = [u for u in urls if any(inc in u for inc in includes)]
+    print(f"Filtered by include-path: {len(out)} / {len(urls)}")
+    return out
+
+
+def prioritize_tour_urls(urls: list[str]) -> list[str]:
+    """Bulk queue order: high-value commercial pages first."""
+    def key(u: str):
+        t = classify_url(u)
+        return (-TYPE_PRIORITY.get(t, 0), u)
+
+    sorted_urls = sorted(urls, key=key)
+    counts: dict[str, int] = {}
+    for u in sorted_urls:
+        t = classify_url(u)
+        counts[t] = counts.get(t, 0) + 1
+    print("Priority queue counts:", ", ".join(f"{k}={v}" for k, v in sorted(counts.items())))
+    return sorted_urls
+
+
+def summarize_types(urls: list[str]) -> None:
+    counts: dict[str, int] = {}
+    for u in urls:
+        t = classify_url(u)
+        counts[t] = counts.get(t, 0) + 1
+    print("Content mix:")
+    for k in sorted(counts, key=lambda x: -counts[x]):
+        print(f"  {k:14} {counts[k]}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -154,15 +293,37 @@ def get_access_token(sa: dict, scope: str) -> str:
 def fetch_sitemap_urls(sitemap: str) -> list[str]:
     print(f"Loading sitemap: {sitemap}")
 
-    if sitemap.startswith('http'):
-        r = requests.get(sitemap, timeout=20)
-        r.raise_for_status()
-        content = r.content
+    if sitemap.startswith("http"):
+        # Large tour-operator sitemaps can exceed 20s on cold CF/origin
+        try:
+            r = requests.get(
+                sitemap,
+                timeout=(10, 90),
+                headers={"User-Agent": f"google-indexer-cli/{__version__} (+tour-operator-seo)"},
+            )
+            r.raise_for_status()
+            content = r.content
+        except requests.RequestException as e:
+            print(f"ERROR: failed to fetch sitemap: {e}")
+            print("Tip: download sitemap.xml locally, then:")
+            print("  python seo_indexer.py --site https://example.com --sitemap ./sitemap.xml --list-only")
+            print("Or bulk from a file:")
+            print("  python seo_indexer.py --urls-file urls.txt --urls-file-only --list-only")
+            print("Private sites: copy profiles.example.json → profiles.local.json (gitignored).")
+            sys.exit(1)
     else:
-        # local file
-        content = Path(sitemap).read_bytes()
+        path = Path(sitemap)
+        if not path.exists():
+            print(f"ERROR: local sitemap not found: {sitemap}")
+            sys.exit(1)
+        content = path.read_bytes()
 
-    root = ET.fromstring(content)
+    try:
+        root = ET.fromstring(content)
+    except ET.ParseError as e:
+        print(f"ERROR: invalid sitemap XML: {e}")
+        sys.exit(1)
+
     ns = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
     urls = []
 
@@ -176,11 +337,14 @@ def fetch_sitemap_urls(sitemap: str) -> list[str]:
                 urls.extend(child_urls)
         return urls
 
-    # Regular urlset
-    for loc in root.findall(".//sm:loc", ns):
+    # Regular urlset (namespaced or bare tags)
+    locs = root.findall(".//sm:loc", ns)
+    if not locs:
+        locs = [el for el in root.iter() if el.tag == "loc" or el.tag.endswith("}loc")]
+
+    for loc in locs:
         if loc.text:
-            url = loc.text.strip()
-            urls.append(url)
+            urls.append(loc.text.strip())
 
     print(f"Found {len(urls)} URLs")
     return urls
@@ -494,6 +658,20 @@ class IndexerState:
                 "errors": stats.get("error", 0) + stats.get("quota", 0),
             }
 
+    def get_today_quota_used(self) -> int:
+        """How many Indexing API submits were counted today (local date)."""
+        today = date.today().isoformat()
+        if self.backend == "json":
+            return int(self._data.get("daily", {}).get(today, 0))
+        if self.backend == "sqlite":
+            cur = self.conn.execute("SELECT count FROM quota WHERE day=?", (today,))
+            row = cur.fetchone()
+            return int(row[0]) if row else 0
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT count FROM indexer_quota WHERE day=%s", (today,))
+            row = cur.fetchone()
+            return int(row["count"]) if row else 0
+
     def increment_daily_quota(self) -> bool:
         """Return True if under quota."""
         today = date.today().isoformat()
@@ -562,25 +740,95 @@ def save_results(path: Path, results: dict):
 # Main logic
 # ─────────────────────────────────────────────────────────────────────────────
 def main():
-    parser = argparse.ArgumentParser(description="Generic SEO Page Indexer (sitemap + Indexing + Inspection)")
-    parser.add_argument("--site", default=DEFAULT_SITE, help="Site base URL")
-    parser.add_argument("--sitemap", help="Sitemap URL or local file path (defaults to {site}/sitemap.xml)")
+    # Pre-parse --profiles-file so --profile choices include local operator configs
+    pre = argparse.ArgumentParser(add_help=False)
+    pre.add_argument("--profiles-file", default=None)
+    pre_args, _ = pre.parse_known_args()
+    profiles = load_profiles(pre_args.profiles_file)
+
+    parser = argparse.ArgumentParser(
+        description=(
+            "Tour-operator bulk SEO indexer — Google Indexing API + Search Console. "
+            "Bulk queue from sitemap / URL files with resume under daily quota. "
+            "Public defaults use example.com; set SITE/SITEMAP or profiles.local.json for real sites."
+        )
+    )
+    parser.add_argument(
+        "--profiles-file",
+        default=None,
+        help="Optional JSON file of named site profiles (overrides/extends built-ins)",
+    )
+    parser.add_argument(
+        "--profile",
+        choices=sorted(profiles.keys()) if profiles else None,
+        help="Named site preset (built-in: demo, demo-staging; add private ones in profiles.local.json)",
+    )
+    parser.add_argument("--site", default=None, help="Site base URL (default: https://example.com or profile)")
+    parser.add_argument(
+        "--site-url",
+        default=None,
+        help=(
+            "Search Console property URL for inspection. "
+            "URL-prefix: https://example.com/  |  Domain: sc-domain:example.com"
+        ),
+    )
+    parser.add_argument("--sitemap", help="Sitemap URL or local file (defaults to {site}/sitemap.xml)")
     parser.add_argument("--service-account", default=DEFAULT_SERVICE_ACCOUNT, help="Path to service_account.json")
-    parser.add_argument("--results", default=DEFAULT_RESULTS, help="Progress JSON file")
-    parser.add_argument("--url", help="Process a single URL instead of full sitemap")
+    parser.add_argument("--results", default=DEFAULT_RESULTS, help="Progress JSON file (json backend)")
+    parser.add_argument("--url", help="Process a single URL (or path) instead of full sitemap")
+    parser.add_argument(
+        "--urls-file",
+        help="Bulk: text file with one URL per line (in addition to / instead of sitemap)",
+    )
+    parser.add_argument(
+        "--urls-file-only",
+        action="store_true",
+        help="With --urls-file: do not also load the sitemap (file is the full queue)",
+    )
+    parser.add_argument(
+        "--type",
+        action="append",
+        dest="types",
+        default=[],
+        help=(
+            "Bulk filter by tour-operator content type (repeatable). "
+            "One of: tours, destinations, guides, articles, groups, static, other. "
+            "Example: --type tours --type destinations"
+        ),
+    )
+    parser.add_argument(
+        "--include-path",
+        action="append",
+        default=[],
+        help="Bulk: only URLs containing this substring (repeatable), e.g. --include-path /tours/",
+    )
+    parser.add_argument(
+        "--prioritize-tours",
+        action="store_true",
+        help="Bulk queue: process tours/destinations/guides before tags & low-value pages",
+    )
+    parser.add_argument(
+        "--list-only",
+        action="store_true",
+        help="Bulk: print classified URL queue and exit (no API calls, no SA required)",
+    )
+    parser.add_argument(
+        "--export-queue",
+        help="Bulk: write the filtered/prioritized URL list to a file and exit",
+    )
     parser.add_argument("--submit", action="store_true", help="Submit URLs for indexing (Indexing API)")
     parser.add_argument("--inspect", action="store_true", help="Perform URL Inspection (Search Console)")
     parser.add_argument("--inspect-only", action="store_true", help="Only inspect, do not submit")
     parser.add_argument("--resume", action="store_true", help="Skip already successful URLs")
     parser.add_argument("--retry-errors", action="store_true", help="Only retry previously failed")
     parser.add_argument("--dry-run", action="store_true", help="Preview only")
-    parser.add_argument("--limit", type=int, default=0, help="Max URLs to process this run")
-    parser.add_argument("--skip", action="append", default=[], help="Paths to skip (can repeat, e.g. --skip /admin --skip /api)")
+    parser.add_argument("--limit", type=int, default=0, help="Max URLs this run (recommended: 50–180/day)")
+    parser.add_argument("--skip", action="append", default=[], help="Paths to skip (repeatable)")
 
     # History / persistence
     parser.add_argument("--history-backend", default=DEFAULT_HISTORY_BACKEND,
                         choices=["json", "sqlite", "mysql"],
-                        help="State storage: json (simple), sqlite (recommended), mysql (robust fallback)")
+                        help="State storage: json | sqlite (recommended) | mysql")
     parser.add_argument("--db-path", default=DEFAULT_DB_PATH, help="Path for sqlite history db")
     parser.add_argument("--mysql-host", default=os.getenv("MYSQL_HOST", "localhost"))
     parser.add_argument("--mysql-port", type=int, default=int(os.getenv("MYSQL_PORT", 3306)))
@@ -591,27 +839,50 @@ def main():
     # Extra actions
     parser.add_argument("--status", action="store_true", help="Show current stats and exit")
     parser.add_argument("--export-failed", help="Export failed/quota URLs to file and exit")
+    parser.add_argument("--list-profiles", action="store_true", help="List known profiles and exit")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     args = parser.parse_args()
 
-    site = args.site.rstrip("/")
-    sitemap_url = args.sitemap or f"{site}/sitemap.xml"
+    if args.list_profiles:
+        print("Available profiles:")
+        for name in sorted(profiles.keys()):
+            cfg = profiles[name]
+            print(f"  {name:16} site={cfg.get('site', '?')} sitemap={cfg.get('sitemap', '(default)')}")
+        print("\nAdd private profiles: copy profiles.example.json → profiles.local.json")
+        return
+
+    # Apply profile defaults (public repo uses example.com; override via env/local profiles)
+    profile = profiles.get(args.profile or "", {})
+    site = (args.site or profile.get("site") or DEFAULT_SITE).rstrip("/")
+    sitemap_url = args.sitemap or profile.get("sitemap") or f"{site}/sitemap.xml"
+    profile_skips = list(profile.get("skip") or [])
+    all_skips = profile_skips + list(args.skip or [])
     sa_path = Path(args.service_account)
 
-    if not sa_path.exists():
-        print(f"Service account not found: {sa_path}")
-        sys.exit(1)
+    # List / export queue do not need service account
+    list_mode = args.list_only or bool(args.export_queue)
 
-    sa = json.loads(sa_path.read_text())
+    if not list_mode and not args.status and not args.export_failed:
+        if not sa_path.exists():
+            print(f"Service account not found: {sa_path}")
+            print("See docs/GSC_SETUP.md — create Google Cloud SA + Search Console Owner.")
+            sys.exit(1)
+        sa = json.loads(sa_path.read_text())
+    else:
+        sa = None
 
     # Determine scopes needed
     needs_indexing = args.submit and not args.inspect_only
     needs_inspection = args.inspect or args.inspect_only
 
+    if not list_mode and not args.status and not args.export_failed:
+        if not needs_indexing and not needs_inspection and not args.dry_run:
+            print("Nothing to do. Pass --submit and/or --inspect (or --list-only / --dry-run).")
+            sys.exit(0)
+
     indexing_scope = "https://www.googleapis.com/auth/indexing"
     inspection_scope = "https://www.googleapis.com/auth/webmasters.readonly"
 
-    # New unified state (supports MySQL fallback for history as requested)
     mysql_cfg = None
     if args.history_backend == "mysql":
         mysql_cfg = {
@@ -628,51 +899,92 @@ def main():
         mysql_config=mysql_cfg
     )
 
+    # Search Console property for URL Inspection
+    sc_site_url = args.site_url or profile.get("site_url")
+    if not sc_site_url:
+        sc_site_url = site if site.endswith("/") else site + "/"
+
     # Special actions
     if args.status:
         stats = state.get_stats()
+        used = state.get_today_quota_used()
+        remaining = max(0, DAILY_QUOTA - used)
         print("=== Indexer Status ===")
+        print(f"  site profile: {args.profile or '(none)'}")
+        print(f"  site: {site}")
+        print(f"  sc_site_url: {sc_site_url}")
+        print(f"  history: {args.history_backend} ({state.path})")
+        print(f"  daily_quota: {used} used / {DAILY_QUOTA} cap ({remaining} left today)")
         for k, v in stats.items():
             print(f"  {k}: {v}")
-        if hasattr(state, 'get_failed'):
-            failed = state.get_failed()
-            print(f"  failed_sample: {failed[:3]}...")
+        failed = state.get_failed()
+        if failed:
+            print(f"  failed_sample: {failed[:5]}")
         state.close()
         return
 
     if args.export_failed:
         failed = state.get_failed()
-        Path(args.export_failed).write_text("\n".join(failed))
+        Path(args.export_failed).write_text("\n".join(failed) + ("\n" if failed else ""))
         print(f"Exported {len(failed)} failed URLs to {args.export_failed}")
         state.close()
         return
 
-    # Build list of URLs
+    # ── Build bulk URL queue ───────────────────────────────────────────────
     if args.url:
         urls = [urljoin(site + "/", args.url.lstrip("/"))]
     elif args.retry_errors:
         urls = state.get_failed()
         print(f"Retrying {len(urls)} failed URLs")
+    elif args.urls_file and args.urls_file_only:
+        urls = load_urls_file(args.urls_file)
     else:
         urls = fetch_sitemap_urls(sitemap_url)
-        if args.resume:
-            urls = state.get_pending(urls, resume=True)
-            print(f"Resuming — {len(urls)} URLs left (using {args.history_backend} history)")
+        if args.urls_file:
+            extra = load_urls_file(args.urls_file)
+            seen = set(urls)
+            for u in extra:
+                if u not in seen:
+                    urls.append(u)
+                    seen.add(u)
+            print(f"Merged sitemap + urls-file → {len(urls)} unique URLs")
 
-    if args.limit > 0:
-        urls = urls[:args.limit]
+    # Tour-operator filters
+    if args.types:
+        urls = filter_by_types(urls, args.types)
+    if args.include_path:
+        urls = filter_by_include_paths(urls, args.include_path)
 
-    # Apply skips (similar to xenohuru scripts)
-    if args.skip:
+    if all_skips:
         original_len = len(urls)
-        urls = [u for u in urls if not any(skip in u for skip in args.skip)]
+        urls = [u for u in urls if not any(skip in u for skip in all_skips)]
         print(f"After skips: {len(urls)} (removed {original_len - len(urls)})")
 
-    print(f"Total URLs to process: {len(urls)} (backend={args.history_backend})")
+    if args.prioritize_tours or args.profile:
+        # Profile defaults to commercial priority for operators
+        urls = prioritize_tour_urls(urls)
 
-    if args.dry_run:
+    if args.resume and not args.retry_errors and not args.url:
+        urls = state.get_pending(urls, resume=True)
+        print(f"Resuming — {len(urls)} URLs left (history={args.history_backend})")
+
+    if args.limit > 0:
+        urls = urls[: args.limit]
+
+    summarize_types(urls)
+    print(f"Total URLs to process: {len(urls)} | site={site} | backend={args.history_backend}")
+
+    if args.export_queue:
+        Path(args.export_queue).write_text("\n".join(urls) + ("\n" if urls else ""))
+        print(f"Exported queue ({len(urls)}) → {args.export_queue}")
+        state.close()
+        return
+
+    if args.list_only or args.dry_run:
         for u in urls:
-            print(f"  [DRY] {u}")
+            print(f"  [{classify_url(u):12}] {u}")
+        if args.list_only:
+            print(f"\nList-only: {len(urls)} URLs (no API calls).")
         state.close()
         return
 
@@ -692,12 +1004,11 @@ def main():
 
     processed = 0
     for url in urls:
-        print(f"\n[{processed+1}/{len(urls)}] {url}")
+        print(f"\n[{processed+1}/{len(urls)}] [{classify_url(url)}] {url}")
 
-        # Submit
         if needs_indexing:
             if not state.increment_daily_quota():
-                print("  ⚠ Daily quota reached — stopping")
+                print("  ⚠ Daily quota reached — stopping (re-run tomorrow with --resume)")
                 break
 
             status = submit_url(url, indexing_token)
@@ -706,20 +1017,22 @@ def main():
                 print("  ✓ Submitted for indexing")
             elif status == "QUOTA_EXCEEDED":
                 state.mark_error(url, "quota", is_quota=True)
-                print("  ⚠ Quota exceeded — stopping")
+                print("  ⚠ Google quota exceeded — stopping (resume later)")
                 break
             else:
                 state.mark_error(url, status)
                 print(f"  ✗ {status}")
 
-        # Inspect
         if needs_inspection:
-            insp = inspect_url(url, inspection_token, site)
+            insp = inspect_url(url, inspection_token, sc_site_url)
             if insp.get("status") == "OK":
                 state.mark_inspected(url)
-                print(f"  ✓ Inspected | Coverage: {insp.get('coverage')} | Last crawl: {insp.get('lastCrawl')}")
+                print(
+                    f"  ✓ Inspected | Coverage: {insp.get('coverage')} | "
+                    f"Last crawl: {insp.get('lastCrawl')}"
+                )
             else:
-                print(f"  ✗ Inspection: {insp.get('status')}")
+                print(f"  ✗ Inspection: {insp.get('status')} {insp.get('body', '')[:120]}")
 
         processed += 1
         time.sleep(DELAY_SECONDS)
@@ -728,12 +1041,13 @@ def main():
     try:
         final_stats = state.get_stats()
         print(f"Submitted: {final_stats.get('submitted', 0)}")
-        print(f"Inspected:  {final_stats.get('inspected', 0)}")
+        print(f"Inspected: {final_stats.get('inspected', 0)}")
         print(f"Errors:    {final_stats.get('errors', 0)}")
     except Exception:
         pass
+    print(f"Processed this run: {processed}")
     print(f"History backend: {args.history_backend}")
-    print("Done.")
+    print("Done. For multi-day bulk: re-run with --resume --submit --limit 150")
     state.close()
 
 
