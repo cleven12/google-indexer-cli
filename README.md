@@ -3,182 +3,144 @@
 [![CI](https://github.com/cleven12/google-indexer-cli/workflows/CI/badge.svg)](https://github.com/cleven12/google-indexer-cli/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
-[![GitHub release](https://img.shields.io/github/v/release/cleven12/google-indexer-cli)](https://github.com/cleven12/google-indexer-cli/releases)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-A simple, lightweight CLI tool to submit URLs to Google Indexing API and run Search Console inspections — with excellent resume support.
+**Tour-operator bulk Google indexer** — submit and inspect large sitemaps (tours, destinations, guides) with resume + daily quota control.
 
-**Perfect for** site owners, bloggers, and SEO folks who want direct control without relying on slow auto-indexing.
+Repo: [github.com/cleven12/google-indexer-cli](https://github.com/cleven12/google-indexer-cli)
 
-Built with openssl JWT (no heavy SDKs). Supports sqlite / json / mysql history backends.
+Public docs and defaults use **`https://example.com`**. Point the tool at your real site with env vars, CLI flags, or a private `profiles.local.json` (gitignored).
 
 ## Features
 
-- Recursive parsing of `sitemap.xml` (including sitemap index files)
-- One-by-one submissions to the Google Indexing API
-- Full URL Inspection via Search Console API
-- **Multiple persistent history backends** for bulletproof resume:
-  - `sqlite` (default – zero extra dependencies)
-  - `json` (simple files)
-  - `mysql` (for shared databases or teams)
-- Daily quota awareness with auto-stop
-- Useful commands: `--status`, `--export-failed`, `--retry-errors`, `--dry-run`
-- Fully generic and configurable
+- Recursive `sitemap.xml` (including sitemap indexes)
+- **Bulk sources**: full sitemap, `--urls-file` / `--urls-file-only`, single `--url`
+- **Tour-operator filters**: `--type tours|destinations|guides|articles|groups|static`
+- **Priority queue**: commercial pages first (`--prioritize-tours`)
+- Google **Indexing API** submit + Search Console **URL Inspection**
+- History backends: `sqlite` (default), `json`, `mysql` — multi-day bulk resume
+- Daily quota stop (~180–200/day) so bulk runs safely overnight/week
+- **Named profiles** — built-in `demo` / `demo-staging` (example.com); add private profiles locally
 
-## Quick Start
-
-### Installation
+## Install
 
 ```bash
 pip install git+https://github.com/cleven12/google-indexer-cli.git
-```
-
-Or from source:
-```bash
+# or from source
 git clone https://github.com/cleven12/google-indexer-cli.git
-cd google-indexer-cli
-pip install .
+cd google-indexer-cli && pip install -e .
 ```
 
-After install, both `google-indexer` and `google-indexer-cli` commands are available.
+Commands: `google-indexer` and `google-indexer-cli`.
 
-### Basic Usage
+## Google setup (required first)
+
+You must create a **Search Console** property and a **service account**.  
+Full checklist: **[docs/GSC_SETUP.md](docs/GSC_SETUP.md)**.
+
+Short version:
+
+1. Verify your property in Search Console (docs show `example.com`)  
+2. Enable Indexing API + Search Console API in Google Cloud  
+3. Create service account → download `service_account.json`  
+4. Add SA email as **Owner** in Search Console  
+
+## Quick start
 
 ```bash
-google-indexer \
-  --site https://example.com \
-  --submit --inspect --resume
+# 1) Offline preview (fixture — no network, no secrets)
+python seo_indexer.py --profile demo \
+  --sitemap fixtures/sample_sitemap.xml --list-only --limit 30
+
+# 2) Configure your real site privately
+cp .env.example .env
+# edit SITE= and SITEMAP=
+# or: cp profiles.example.json profiles.local.json
+
+# 3) Export only tours to a queue file
+python seo_indexer.py --site https://example.com --type tours \
+  --sitemap fixtures/sample_sitemap.xml \
+  --export-queue queues/tours.txt
+
+# 4) Bulk submit under quota (resume next day)
+python seo_indexer.py --site https://example.com \
+  --service-account service_account.json \
+  --type tours --prioritize-tours \
+  --submit --resume --limit 150
+
+# 5) Status (history + today's quota used)
+python seo_indexer.py --status
 ```
 
-### Use in Different Environments
-
-**macOS / Linux**
-```bash
-# With pipx (recommended for CLI tools)
-pipx install git+https://github.com/cleven12/google-indexer-cli.git
-google-indexer --status
-```
-
-**Windows (PowerShell)**
-```powershell
-pip install git+https://github.com/cleven12/google-indexer-cli.git
-google-indexer --submit --inspect --resume
-```
-
-**Docker**
-```bash
-docker run --rm -v $(pwd):/work -w /work python:3.11 \
-  sh -c "pip install git+https://github.com/cleven12/google-indexer-cli.git && \
-         google-indexer --site https://example.com --submit --inspect"
-```
-
-**GitHub Actions** (example for static sites)
-```yaml
-- name: Index new pages
-  run: |
-    pip install git+https://github.com/cleven12/google-indexer-cli.git
-    google-indexer --site https://example.com --submit --inspect --resume --limit 50
-```
-
-### Using with AI Tools (Claude / Google APIs)
-
-This tool shines when combined with AI for content + indexing workflows:
-
-1. Use **Claude** (Anthropic) or **Google Gemini** to generate new pages/posts and update your sitemap.
-2. Run the indexer on the new URLs so Google discovers them faster.
-
-Example flow:
-```bash
-# 1. Generate content with Claude / Gemini (your own script)
-# 2. Rebuild sitemap
-# 3. Index immediately
-google-indexer --site https://example.com --submit --inspect --resume
-```
-
-This combination (AI content generation + direct Google Indexing) helps get fresh content indexed quickly.
-
-### Common Commands
+Or use the wrapper (reads `.env` if present):
 
 ```bash
-google-indexer --submit --inspect --resume --limit 150
-google-indexer --status
-google-indexer --retry-errors --submit
-google-indexer --export-failed failed.txt
-google-indexer --history-backend mysql --submit --inspect --resume
+./run.sh --list-only --limit 20
+./run.sh --type tours --submit --resume --limit 100
 ```
 
-## Configuration
+List profiles:
 
-All options via CLI flags (recommended) or environment variables.
+```bash
+python seo_indexer.py --list-profiles
+```
 
-Key flags:
-- `--site` — Your site URL
-- `--sitemap` — Sitemap URL (defaults to site/sitemap.xml)
-- `--history-backend` — sqlite (default) | json | mysql
-- `--limit` — Max URLs this run (good for quotas)
+## Bulk patterns
 
-## Requirements
+| Goal | Command idea |
+|------|----------------|
+| All pending URLs over many days | `--submit --resume --limit 150` |
+| Only commercial tours | `--type tours` |
+| From CMS export list | `--urls-file new_tours.txt --urls-file-only --submit` |
+| Preview classification | `--list-only` |
+| Failed only | `--retry-errors --submit` |
 
-- Python ≥ 3.9
-- `requests`
-- `openssl` (for JWT)
-- Optional: `pymysql` for MySQL backend
+```bash
+# Path include (bulk subset)
+python seo_indexer.py --site https://example.com \
+  --include-path /tours/ --include-path /destinations/ \
+  --submit --resume --limit 100
 
-## Google Setup
+# Domain property inspection
+python seo_indexer.py --site https://example.com --inspect-only --limit 5 \
+  --site-url "sc-domain:example.com"
+```
 
-1. Create Service Account in Google Cloud
-2. Enable **Indexing API**
-3. Download JSON key
-4. Add the service account as Owner in Search Console
+## Important limits
 
-## Why This Tool?
+Google will **not** let you index an entire large site in one API burst.
 
-Simple, reliable control over Google indexing. Great when you publish via AI (Claude, Gemini, etc.) and want new pages discovered fast.
+- Plan **~150 URL_UPDATED / day**
+- Use **`--resume`** every day until the queue is empty
+- Keep **sitemap.xml** healthy (primary discovery)
+- Indexing API is officially for certain schema types; use for high-value URLs, not spam
+
+## Config
+
+| Flag / env | Meaning |
+|------------|---------|
+| `--profile demo` | Built-in example.com preset |
+| `--site` / `SITE` | Base URL |
+| `--sitemap` / `SITEMAP` | Sitemap URL or local file |
+| `--site-url` | Search Console property (`https://…/` or `sc-domain:…`) |
+| `--service-account` | Path to JSON key |
+| `--history-backend` | `sqlite` \| `json` \| `mysql` |
+| `--limit` | Max URLs this run |
+| `profiles.local.json` | Private named profiles (gitignored) |
+
+See `.env.example` and `profiles.example.json`.
+
+## Contributing
+
+PRs welcome — see **[CONTRIBUTING.md](CONTRIBUTING.md)**.
+
+Ideas that help the project grow:
+
+- Better sitemap edge cases (gzip, lastmod filters)
+- Extra content-type heuristics for other verticals
+- Tests, docs translations, Windows packaging polish
+- Safer rate-limit / quota reporting
 
 ## License
 
 MIT — see [LICENSE](LICENSE).
-
-Contributions welcome!
-2. (Optional) mysqldump + restore to prod.
-3. Run indexer from your laptop:
-   ```bash
-   ./run.sh --submit --inspect --resume --limit 120
-   ```
-4. Check status anytime:
-   ```bash
-   ./run.sh --status
-   ```
-
-## Full CLI
-
-```
-python seo_indexer.py --submit --inspect --resume --history-backend sqlite --limit 100
-python seo_indexer.py --status
-python seo_indexer.py --export-failed failed.txt
-python seo_indexer.py --retry-errors --submit
-```
-
-## Requirements
-
-```bash
-pip install requests
-# Optional
-pip install pymysql
-```
-
-`openssl` required for JWT (same as xenohuru).
-
-## Service Account
-
-1. Google Cloud → Service Account + JSON key
-2. Enable **Indexing API**
-3. Add the service account as **Owner** in Google Search Console property
-
-## Why This Design?
-
-- One-by-one + persistent state = bulletproof resume even after days
-- Lightweight, no heavy google libs
-- Optional MySQL exactly for the history fallback case
-- Works perfectly after bulk JSON imports on the Visit Kili site
-
-Created as the official external indexer for Visit Kili v2.
