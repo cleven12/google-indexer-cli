@@ -36,6 +36,10 @@ jobs:
           google-indexer --help
           google-indexer --status || true
 
-      - name: Run basic smoke test
+      - name: Bulk queue smoke (offline fixture)
         run: |
-          echo "Basic CLI smoke tests passed on ${{ matrix.os }} / Python ${{ matrix.python-version }}"
+          google-indexer --profile demo --sitemap fixtures/sample_sitemap.xml --list-only --limit 20
+          google-indexer --profile demo --sitemap fixtures/sample_sitemap.xml --type tours --export-queue tours_q.txt
+          test -s tours_q.txt
+          google-indexer --list-profiles
+          google-indexer --profile demo --status

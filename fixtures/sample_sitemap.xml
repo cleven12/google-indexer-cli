@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://example.com/</loc></url>
+  <url><loc>https://example.com/tours/mountain-trek-7-days</loc></url>
+  <url><loc>https://example.com/tours/wildlife-safari-4-days</loc></url>
+  <url><loc>https://example.com/destinations/region-a</loc></url>
+  <url><loc>https://example.com/destinations/region-b</loc></url>
+  <url><loc>https://example.com/guides/packing-list</loc></url>
+  <url><loc>https://example.com/guides/articles/best-season</loc></url>
+  <url><loc>https://example.com/booking/groups/summer-2026</loc></url>
+  <url><loc>https://example.com/about</loc></url>
+  <url><loc>https://example.com/tours/tag/budget</loc></url>
+  <url><loc>https://example.com/admin/dashboard</loc></url>
+</urlset>
