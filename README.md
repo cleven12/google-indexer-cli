@@ -1,152 +1,810 @@
-# google-indexer-cli
+<div align="center">
 
-[![CI](https://github.com/cleven12/google-indexer-cli/workflows/CI/badge.svg)](https://github.com/cleven12/google-indexer-cli/actions)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+# Google Indexer CLI
 
-**Tour-operator bulk Google indexer** — submit and inspect large sitemaps (tours, destinations, guides) with resume + daily quota control.
+**Tour-operator bulk Google indexing & URL inspection toolkit**
 
-Repo: [github.com/cleven12/google-indexer-cli](https://github.com/cleven12/google-indexer-cli)
+Submit, inspect, classify, queue, and resume large numbers of tourism URLs from sitemaps and URL lists — with history tracking and daily quota control.
 
-Public docs and defaults use **`https://example.com.com`**. Point the tool at your real site with env vars, CLI flags, or a private `profiles.local.json` (gitignored).
+<p>
+  <a href="https://github.com/cleven12/google-indexer-cli">
+    <img src="https://img.shields.io/github/stars/cleven12/google-indexer-cli?style=for-the-badge" alt="GitHub Stars">
+  </a>
+  <a href="https://github.com/cleven12/google-indexer-cli/network/members">
+    <img src="https://img.shields.io/github/forks/cleven12/google-indexer-cli?style=for-the-badge" alt="GitHub Forks">
+  </a>
+  <a href="https://github.com/cleven12/google-indexer-cli/blob/main/LICENSE">
+    <img src="https://img.shields.io/github/license/cleven12/google-indexer-cli?style=for-the-badge" alt="License">
+  </a>
+  <a href="https://www.python.org/">
+    <img src="https://img.shields.io/badge/Python-3.x-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python">
+  </a>
+  <a href="https://github.com/cleven12/google-indexer-cli">
+    <img src="https://img.shields.io/github/last-commit/cleven12/google-indexer-cli?style=for-the-badge" alt="Last Commit">
+  </a>
+</p>
+
+<p>
+  <code>sitemap.xml</code> → <code>classify</code> → <code>prioritize</code> → <code>queue</code> → <code>submit</code> → <code>inspect</code> → <code>resume</code>
+</p>
+
+</div>
+
+---
+
+## Overview
+
+`google-indexer-cli` is a command-line tool designed for **tour operators, tourism websites, and large content-driven sites** that need a controlled workflow for managing Google indexing operations.
+
+Instead of manually submitting URLs one by one, the tool can discover URLs from sitemaps, classify them by content type, prioritize commercially important pages, maintain submission history, and continue unfinished jobs across multiple days.
+
+Typical content includes:
+
+* Tours
+* Safari packages
+* Destinations
+* Travel guides
+* Articles
+* Group tours
+* Static pages
+
+The tool is designed around a simple principle:
+
+> **Discover → classify → prioritize → queue → submit → track → resume**
+
+---
 
 ## Features
 
-- Recursive `sitemap.xml` (including sitemap indexes)
-- **Bulk sources**: full sitemap, `--urls-file` / `--urls-file-only`, single `--url`
-- **Tour-operator filters**: `--type tours|destinations|guides|articles|groups|static`
-- **Priority queue**: commercial pages first (`--prioritize-tours`)
-- Google **Indexing API** submit + Search Console **URL Inspection**
-- History backends: `sqlite` (default), `json`, `mysql` — multi-day bulk resume
-- Daily quota stop (~180–200/day) so bulk runs safely overnight/week
-- **Named profiles** — built-in `demo` / `demo-staging` (example.com.com); add private profiles locally
+### Sitemap discovery
 
-## Install
+* Recursive `sitemap.xml` parsing
+* Supports sitemap indexes
+* Handles nested sitemap structures
+* Local sitemap fixtures for offline testing
+
+### Flexible URL sources
+
+URLs can come from:
+
+* Complete sitemaps
+* Sitemap indexes
+* Local URL files
+* Individual URLs
+* CMS exports
+
+```bash
+--sitemap
+--urls-file
+--urls-file-only
+--url
+```
+
+### Tourism-aware classification
+
+Classify URLs according to common tour-operator content types:
+
+```text
+tours
+destinations
+guides
+articles
+groups
+static
+```
+
+Example:
+
+```bash
+python seo_indexer.py \
+  --site https://example.com \
+  --type tours \
+  --list-only
+```
+
+### Priority processing
+
+Commercial pages can be processed before lower-value pages.
+
+```bash
+--prioritize-tours
+```
+
+This is useful when a site contains thousands of URLs but you want important revenue-generating pages handled first.
+
+### Google integration
+
+Supports:
+
+* Google Indexing API submission
+* Google Search Console URL Inspection
+* Search Console property targeting
+* Submission history
+* Inspection results
+
+### Resumeable bulk processing
+
+Large websites do not need to be processed in a single run.
+
+The tool maintains history so unfinished queues can continue later:
+
+```bash
+--submit --resume
+```
+
+Example:
+
+```bash
+python seo_indexer.py \
+  --site https://example.com \
+  --submit \
+  --resume \
+  --limit 150
+```
+
+### History backends
+
+Supported backends:
+
+```text
+sqlite
+json
+mysql
+```
+
+SQLite is the default and works well for local usage.
+
+### Daily quota control
+
+The CLI can stop after a configured number of submissions so a large queue can be processed incrementally.
+
+This makes it practical to run jobs overnight or continue processing over multiple days.
+
+### Profiles
+
+Named profiles make it possible to keep configuration separate for different websites.
+
+Built-in profiles:
+
+```text
+demo
+demo-staging
+```
+
+Private profiles can be stored in:
+
+```text
+profiles.local.json
+```
+
+This file is intended to remain local and is gitignored.
+
+---
+
+# Installation
+
+## Install from GitHub
 
 ```bash
 pip install git+https://github.com/cleven12/google-indexer-cli.git
-# or from source
-git clone https://github.com/cleven12/google-indexer-cli.git
-cd google-indexer-cli && pip install -e .
 ```
 
-Commands: `google-indexer` and `google-indexer-cli`.
-
-## Run guide (all commands)
-
-Copy-paste recipes for full-site submit, not-indexed lists, filters, resume, and quotas:
-
-→ **[docs/RUN_GUIDE.txt](docs/RUN_GUIDE.txt)**
-
-## Google setup (required first)
-
-You must create a **Search Console** property and a **service account**.  
-Full checklist: **[docs/GSC_SETUP.md](docs/GSC_SETUP.md)**.
-
-Short version:
-
-1. Verify your property in Search Console (docs show `example.com.com`)  
-2. Enable Indexing API + Search Console API in Google Cloud  
-3. Create service account → download `service_account.json`  
-4. Add SA email as **Owner** in Search Console  
-
-## Quick start
+## Install from source
 
 ```bash
-# 1) Offline preview (fixture — no network, no secrets)
-python seo_indexer.py --profile demo \
-  --sitemap fixtures/sample_sitemap.xml --list-only --limit 30
+git clone https://github.com/cleven12/google-indexer-cli.git
 
-# 2) Configure your real site privately
+cd google-indexer-cli
+
+pip install -e .
+```
+
+After installation, the CLI commands are available as:
+
+```bash
+google-indexer
+google-indexer-cli
+```
+
+---
+
+# Quick Start
+
+## 1. Test offline
+
+Run the included fixture without making network requests or using credentials:
+
+```bash
+python seo_indexer.py \
+  --profile demo \
+  --sitemap fixtures/sample_sitemap.xml \
+  --list-only \
+  --limit 30
+```
+
+This is the recommended first test.
+
+---
+
+## 2. Configure your website
+
+Copy the environment template:
+
+```bash
 cp .env.example .env
-# edit SITE= and SITEMAP=
-# or: cp profiles.example.json profiles.local.json
+```
 
-# 3) Export only tours to a queue file
-python seo_indexer.py --site https://example.com.com --type tours \
+Then configure:
+
+```env
+SITE=https://example.com
+SITEMAP=https://example.com/sitemap.xml
+```
+
+Alternatively, create a local profile:
+
+```bash
+cp profiles.example.json profiles.local.json
+```
+
+`profiles.local.json` should remain private.
+
+---
+
+## 3. Preview URLs
+
+Before submitting anything, inspect what the tool discovered:
+
+```bash
+python seo_indexer.py \
+  --site https://example.com \
+  --list-only \
+  --limit 30
+```
+
+This allows you to verify URL discovery and classification before making API requests.
+
+---
+
+## 4. Export a tour queue
+
+Export only tour URLs:
+
+```bash
+python seo_indexer.py \
+  --site https://example.com \
+  --type tours \
   --sitemap fixtures/sample_sitemap.xml \
   --export-queue queues/tours.txt
+```
 
-# 4) Bulk submit under quota (resume next day)
-python seo_indexer.py --site https://example.com.com \
+The resulting queue can be reviewed or processed later.
+
+---
+
+## 5. Submit URLs
+
+Once Google credentials are configured:
+
+```bash
+python seo_indexer.py \
+  --site https://example.com \
   --service-account service_account.json \
-  --type tours --prioritize-tours \
-  --submit --resume --limit 150
+  --type tours \
+  --prioritize-tours \
+  --submit \
+  --resume \
+  --limit 150
+```
 
-# 5) Status (history + today's quota used)
+---
+
+## 6. Check status
+
+View submission history and current quota usage:
+
+```bash
 python seo_indexer.py --status
 ```
 
-Or use the wrapper (reads `.env` if present):
+---
+
+# Using the Wrapper
+
+The repository also includes `run.sh`.
+
+If `.env` is configured:
 
 ```bash
 ./run.sh --list-only --limit 20
-./run.sh --type tours --submit --resume --limit 100
 ```
 
-List profiles:
+Submit a batch:
+
+```bash
+./run.sh \
+  --type tours \
+  --submit \
+  --resume \
+  --limit 100
+```
+
+---
+
+# Google Search Console Setup
+
+Google credentials are required for real submission and inspection operations.
+
+See:
+
+```text
+docs/GSC_SETUP.md
+```
+
+for the complete setup guide.
+
+## Required setup
+
+### 1. Create a Search Console property
+
+Add and verify your website in Google Search Console.
+
+Example:
+
+```text
+https://example.com/
+```
+
+or a domain property:
+
+```text
+sc-domain:example.com
+```
+
+### 2. Create a Google Cloud project
+
+Enable:
+
+* Google Indexing API
+* Google Search Console API
+
+### 3. Create a service account
+
+Create a service account and download its credentials:
+
+```text
+service_account.json
+```
+
+**Never commit this file to Git.**
+
+### 4. Grant Search Console access
+
+Add the service account email to your Search Console property with the required permissions.
+
+The complete procedure is documented in:
+
+```text
+docs/GSC_SETUP.md
+```
+
+---
+
+# Bulk Processing
+
+The CLI is designed for large URL collections.
+
+## Process all pending URLs
+
+```bash
+python seo_indexer.py \
+  --submit \
+  --resume \
+  --limit 150
+```
+
+The history database tracks previously processed URLs so future runs can continue from where the previous run stopped.
+
+---
+
+## Process only tours
+
+```bash
+python seo_indexer.py \
+  --type tours \
+  --submit \
+  --resume
+```
+
+---
+
+## Process destinations
+
+```bash
+python seo_indexer.py \
+  --type destinations \
+  --submit \
+  --resume
+```
+
+---
+
+## Process a CMS export
+
+If your CMS produces a text file containing URLs:
+
+```bash
+python seo_indexer.py \
+  --urls-file new_tours.txt \
+  --urls-file-only \
+  --submit
+```
+
+---
+
+## Preview classification
+
+Use:
+
+```bash
+python seo_indexer.py \
+  --list-only
+```
+
+This is useful for validating how the tool classifies your URLs before submitting them.
+
+---
+
+## Retry failed URLs
+
+```bash
+python seo_indexer.py \
+  --retry-errors \
+  --submit
+```
+
+---
+
+# Filtering
+
+You can limit processing to specific URL paths.
+
+For example, process tours and destinations:
+
+```bash
+python seo_indexer.py \
+  --site https://example.com \
+  --include-path /tours/ \
+  --include-path /destinations/ \
+  --submit \
+  --resume \
+  --limit 100
+```
+
+This is useful for large websites where different sections need to be processed independently.
+
+---
+
+# URL Inspection
+
+Search Console URL Inspection can be used independently of submission.
+
+Example:
+
+```bash
+python seo_indexer.py \
+  --site https://example.com \
+  --inspect-only \
+  --limit 5 \
+  --site-url "sc-domain:example.com"
+```
+
+This allows you to inspect Google's current understanding of selected URLs.
+
+---
+
+# Profiles
+
+Profiles provide reusable configuration for different websites.
+
+List available profiles:
 
 ```bash
 python seo_indexer.py --list-profiles
 ```
 
-## Bulk patterns
-
-| Goal | Command idea |
-|------|----------------|
-| All pending URLs over many days | `--submit --resume --limit 150` |
-| Only commercial tours | `--type tours` |
-| From CMS export list | `--urls-file new_tours.txt --urls-file-only --submit` |
-| Preview classification | `--list-only` |
-| Failed only | `--retry-errors --submit` |
+Example:
 
 ```bash
-# Path include (bulk subset)
-python seo_indexer.py --site https://example.com.com \
-  --include-path /tours/ --include-path /destinations/ \
-  --submit --resume --limit 100
-
-# Domain property inspection
-python seo_indexer.py --site https://example.com.com --inspect-only --limit 5 \
-  --site-url "sc-domain:example.com.com"
+python seo_indexer.py --profile demo
 ```
 
-## Important limits
+Local private profiles can be stored in:
 
-Google will **not** let you index an entire large site in one API burst.
+```text
+profiles.local.json
+```
 
-- Plan **~150 URL_UPDATED / day**
-- Use **`--resume`** every day until the queue is empty
-- Keep **sitemap.xml** healthy (primary discovery)
-- Indexing API is officially for certain schema types; use for high-value URLs, not spam
+A typical workflow for multiple operators could look like:
 
-## Config
+```text
+profiles.local.json
 
-| Flag / env | Meaning |
-|------------|---------|
-| `--profile demo` | Built-in example.com.com preset |
-| `--site` / `SITE` | Base URL |
-| `--sitemap` / `SITEMAP` | Sitemap URL or local file |
-| `--site-url` | Search Console property (`https://…/` or `sc-domain:…`) |
-| `--service-account` | Path to JSON key |
-| `--history-backend` | `sqlite` \| `json` \| `mysql` |
-| `--limit` | Max URLs this run |
-| `profiles.local.json` | Private named profiles (gitignored) |
+├── operator-a
+├── operator-b
+├── operator-c
+└── operator-d
+```
 
-See `.env.example` and `profiles.example.json`.
+Keep this file outside version control if it contains private configuration.
 
-## Contributing
+---
 
-PRs welcome — see **[CONTRIBUTING.md](CONTRIBUTING.md)**.
+# Configuration
 
-Ideas that help the project grow:
+| Option                  | Description                           |
+| ----------------------- | ------------------------------------- |
+| `--profile`             | Select a named configuration profile  |
+| `--site` / `SITE`       | Website base URL                      |
+| `--sitemap` / `SITEMAP` | Sitemap URL or local sitemap file     |
+| `--site-url`            | Search Console property               |
+| `--service-account`     | Google service-account JSON path      |
+| `--history-backend`     | `sqlite`, `json`, or `mysql`          |
+| `--limit`               | Maximum URLs processed during a run   |
+| `--urls-file`           | Read URLs from a file                 |
+| `--urls-file-only`      | Use only URLs supplied by the file    |
+| `--type`                | Filter by content type                |
+| `--prioritize-tours`    | Prioritize tour pages                 |
+| `--resume`              | Continue from previous history        |
+| `--submit`              | Submit URLs                           |
+| `--inspect-only`        | Run URL inspection without submission |
+| `--list-only`           | Preview without submission            |
+| `--retry-errors`        | Retry previously failed URLs          |
 
-- Better sitemap edge cases (gzip, lastmod filters)
-- Extra content-type heuristics for other verticals
-- Tests, docs translations, Windows packaging polish
-- Safer rate-limit / quota reporting
+See:
 
-## License
+```text
+.env.example
+profiles.example.json
+```
 
-MIT — see [LICENSE](LICENSE).
+for configuration examples.
+
+---
+
+# History & Resume
+
+The history layer is one of the core parts of the CLI.
+
+Instead of treating every execution as a new job, the tool records URL processing state.
+
+Conceptually:
+
+```text
+URL discovered
+      ↓
+Classified
+      ↓
+Queued
+      ↓
+Submitted
+      ↓
+Recorded
+      ↓
+Resume later
+```
+
+This makes multi-day indexing workflows possible without repeatedly processing the same URLs.
+
+---
+
+# Recommended Workflow
+
+For a large tourism website, a typical workflow is:
+
+```text
+             sitemap.xml
+                  │
+                  ▼
+          URL discovery
+                  │
+                  ▼
+           URL filtering
+                  │
+                  ▼
+         Content classification
+                  │
+        ┌─────────┼─────────┐
+        ▼         ▼         ▼
+      Tours   Destinations  Guides
+        │         │         │
+        └─────────┼─────────┘
+                  ▼
+          Priority queue
+                  │
+                  ▼
+          Daily processing
+                  │
+                  ▼
+          Google submission
+                  │
+                  ▼
+          History database
+                  │
+                  ▼
+             --resume
+                  │
+                  ▼
+          Next processing day
+```
+
+This approach is particularly useful for tourism websites with large numbers of:
+
+* Safari packages
+* Kilimanjaro routes
+* Zanzibar packages
+* Destination pages
+* Travel guides
+* Blog articles
+* Accommodation pages
+* Group tours
+
+---
+
+# Important Google Considerations
+
+Google does **not** guarantee that submitting a URL through an API will immediately index that URL.
+
+Submitting URLs should therefore be treated as a discovery/request mechanism rather than an indexing guarantee.
+
+For large websites:
+
+* Keep `sitemap.xml` healthy.
+* Prioritize high-value URLs.
+* Avoid repeatedly submitting unchanged URLs.
+* Use Search Console to monitor indexing status.
+* Process large queues incrementally.
+* Respect Google's API quotas and applicable policies.
+* Do not use the tool as a mechanism for spam or artificial indexing.
+
+The tool's quota controls are intended to help manage API usage and large queues safely; they do not represent a guarantee of Google's indexing behavior.
+
+---
+
+# Project Structure
+
+```text
+google-indexer-cli/
+│
+├── seo_indexer.py
+├── run.sh
+├── pyproject.toml
+├── requirements.txt
+├── README.md
+├── LICENSE
+├── CONTRIBUTING.md
+│
+├── docs/
+│   ├── GSC_SETUP.md
+│   └── RUN_GUIDE.txt
+│
+├── fixtures/
+│   └── sample_sitemap.xml
+│
+├── queues/
+│   └── .gitkeep
+│
+├── .env.example
+├── profiles.example.json
+└── profiles.local.json       # local only / gitignored
+```
+
+---
+
+# Documentation
+
+Detailed documentation is available in:
+
+### Run Guide
+
+```text
+docs/RUN_GUIDE.txt
+```
+
+Contains copy-paste workflows for:
+
+* Full-site submission
+* URL inspection
+* Not-indexed URLs
+* Content-type filtering
+* Queue generation
+* Resume workflows
+* Retry workflows
+* Daily quota processing
+
+### Google Setup
+
+```text
+docs/GSC_SETUP.md
+```
+
+Contains the complete Google Cloud and Search Console configuration process.
+
+---
+
+# Security
+
+Never commit credentials or private configuration.
+
+The following files should remain local:
+
+```text
+service_account.json
+.env
+profiles.local.json
+```
+
+Add them to `.gitignore`:
+
+```gitignore
+.env
+service_account.json
+profiles.local.json
+*.db
+*.sqlite3
+```
+
+If credentials are accidentally committed, revoke and regenerate them immediately.
+
+---
+
+# Contributing
+
+Contributions are welcome.
+
+Useful areas for improvement include:
+
+* More sitemap edge cases
+* Gzip sitemap support
+* `lastmod` filtering
+* Better URL classification
+* Additional tourism content types
+* Improved rate-limit handling
+* Better quota reporting
+* More history backends
+* Windows packaging
+* Automated tests
+* Documentation translations
+
+Before submitting a pull request, please read:
+
+```text
+CONTRIBUTING.md
+```
+
+
+---
+
+# License
+
+MIT License.
+
+See:
+
+```text
+LICENSE
+```
+
+for the complete license text.
+
+---
+
+<div align="center">
+
+### Built for large tourism websites
+
+**Discover. Classify. Prioritize. Submit. Inspect. Resume.**
+
+[GitHub Repository](https://github.com/cleven12/google-indexer-cli)
+
+</div>
