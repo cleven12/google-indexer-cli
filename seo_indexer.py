@@ -31,12 +31,12 @@ import sys
 import tempfile
 import time
 import xml.etree.ElementTree as ET
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urljoin, urlparse
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 try:
     import requests
@@ -471,7 +471,20 @@ class IndexerState:
     def _load_json(self):
         if self.path.exists():
             try:
-                return json.loads(self.path.read_text())
+                data = json.loads(self.path.read_text())
+                # Records are {"url": ..., "at": ...}. Older files (pre-cooldown
+                # support) stored bare URL strings with no timestamp - normalize
+                # those to records with at=None so cooldown lookups treat them as
+                # unknown-age (eligible again) rather than crashing on shape.
+                for key in ("submitted", "inspected"):
+                    data[key] = [
+                        entry if isinstance(entry, dict) else {"url": entry, "at": None}
+                        for entry in data.get(key, [])
+                    ]
+                data.setdefault("errors", [])
+                data.setdefault("quota_exceeded", [])
+                data.setdefault("daily", {})
+                return data
             except Exception:
                 pass
         return {"submitted": [], "inspected": [], "errors": [], "quota_exceeded": [], "daily": {}}
@@ -528,11 +541,19 @@ class IndexerState:
             """)
         self.conn.commit()
 
+    def _json_upsert(self, key: str, url: str, at: str):
+        """Insert or refresh a {"url","at"} record in a json-backend list field."""
+        records = self._data[key]
+        for record in records:
+            if record["url"] == url:
+                record["at"] = at
+                return
+        records.append({"url": url, "at": at})
+
     def mark_submitted(self, url: str):
         now = datetime.utcnow().isoformat()
         if self.backend == "json":
-            if url not in self._data["submitted"]:
-                self._data["submitted"].append(url)
+            self._json_upsert("submitted", url, now)
             self._save_json()
         elif self.backend == "sqlite":
             self.conn.execute(
@@ -555,8 +576,7 @@ class IndexerState:
     def mark_inspected(self, url: str):
         now = datetime.utcnow().isoformat()
         if self.backend == "json":
-            if url not in self._data["inspected"]:
-                self._data["inspected"].append(url)
+            self._json_upsert("inspected", url, now)
             self._save_json()
         elif self.backend == "sqlite":
             self.conn.execute(
@@ -597,15 +617,54 @@ class IndexerState:
                 )
             self.conn.commit()
 
-    def get_pending(self, all_urls: list[str], resume: bool) -> list[str]:
+    def get_pending(self, all_urls: list[str], resume: bool, cooldown_hours: float = 0) -> list[str]:
         if not resume:
             return all_urls
+        if cooldown_hours and cooldown_hours > 0:
+            cutoff = datetime.utcnow() - timedelta(hours=cooldown_hours)
+            last_seen = self.get_last_activity_map()
+            still_cooling = set()
+            for u, at in last_seen.items():
+                if at is None:
+                    continue  # unknown age (e.g. pre-cooldown history) - treat as eligible
+                try:
+                    if datetime.fromisoformat(at) > cutoff:
+                        still_cooling.add(u)
+                except ValueError:
+                    continue
+            return [u for u in all_urls if u not in still_cooling]
         done = set(self.get_submitted() + self.get_inspected())
         return [u for u in all_urls if u not in done]
 
+    def get_last_activity_map(self) -> dict:
+        """{url: last ISO timestamp seen (submitted or inspected), or None if unknown}."""
+        if self.backend == "json":
+            out = {}
+            for key in ("submitted", "inspected"):
+                for record in self._data.get(key, []):
+                    url, at = record["url"], record.get("at")
+                    if at is None:
+                        out.setdefault(url, None)
+                    elif out.get(url) is None or at > out[url]:
+                        out[url] = at
+            return out
+        if self.backend == "sqlite":
+            cur = self.conn.execute(
+                "SELECT url, MAX(COALESCE(inspected_at, submitted_at)) FROM jobs "
+                "WHERE status IN ('submitted','inspected') GROUP BY url"
+            )
+            return {r[0]: r[1] for r in cur.fetchall()}
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "SELECT url, GREATEST(COALESCE(submitted_at, '1970-01-01'), "
+                "COALESCE(inspected_at, '1970-01-01')) AS last_at FROM indexer_jobs "
+                "WHERE status IN ('submitted','inspected')"
+            )
+            return {r['url']: str(r['last_at']) for r in cur.fetchall()}
+
     def get_submitted(self) -> list[str]:
         if self.backend == "json":
-            return self._data.get("submitted", [])
+            return [r["url"] for r in self._data.get("submitted", [])]
         if self.backend == "sqlite":
             cur = self.conn.execute("SELECT url FROM jobs WHERE status IN ('submitted','inspected')")
             return [r[0] for r in cur.fetchall()]
@@ -615,7 +674,7 @@ class IndexerState:
 
     def get_inspected(self) -> list[str]:
         if self.backend == "json":
-            return self._data.get("inspected", [])
+            return [r["url"] for r in self._data.get("inspected", [])]
         if self.backend == "sqlite":
             cur = self.conn.execute("SELECT url FROM jobs WHERE status='inspected'")
             return [r[0] for r in cur.fetchall()]
@@ -820,6 +879,11 @@ def main():
     parser.add_argument("--inspect", action="store_true", help="Perform URL Inspection (Search Console)")
     parser.add_argument("--inspect-only", action="store_true", help="Only inspect, do not submit")
     parser.add_argument("--resume", action="store_true", help="Skip already successful URLs")
+    parser.add_argument(
+        "--cooldown-hours", type=float, default=0,
+        help="With --resume: re-allow a submitted/inspected URL after this many hours "
+             "instead of skipping it forever (0 = permanent skip, the default)",
+    )
     parser.add_argument("--retry-errors", action="store_true", help="Only retry previously failed")
     parser.add_argument("--dry-run", action="store_true", help="Preview only")
     parser.add_argument("--limit", type=int, default=0, help="Max URLs this run (recommended: 50–180/day)")
@@ -965,8 +1029,9 @@ def main():
         urls = prioritize_tour_urls(urls)
 
     if args.resume and not args.retry_errors and not args.url:
-        urls = state.get_pending(urls, resume=True)
-        print(f"Resuming — {len(urls)} URLs left (history={args.history_backend})")
+        urls = state.get_pending(urls, resume=True, cooldown_hours=args.cooldown_hours)
+        cooldown_note = f", cooldown={args.cooldown_hours}h" if args.cooldown_hours else ""
+        print(f"Resuming — {len(urls)} URLs left (history={args.history_backend}{cooldown_note})")
 
     if args.limit > 0:
         urls = urls[: args.limit]

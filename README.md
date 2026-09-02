@@ -142,6 +142,24 @@ python seo_indexer.py \
   --limit 150
 ```
 
+By default `--resume` skips a URL forever once it's been submitted or inspected. For
+sites that want to periodically re-request indexing (rather than a strict one-shot
+per URL), add `--cooldown-hours` so a URL becomes eligible again once that many hours
+have passed since it was last processed:
+
+```bash
+python seo_indexer.py \
+  --site https://example.com \
+  --submit \
+  --resume \
+  --cooldown-hours 24 \
+  --limit 150
+```
+
+This is the pattern used by the scheduled GitHub Action (see
+[Scheduled Indexing](#scheduled-indexing) below) — run daily, submit up to 150 URLs
+per run, and let any URL from a previous run become eligible again after 24 hours.
+
 ### History backends
 
 Supported backends:
@@ -556,6 +574,7 @@ Keep this file outside version control if it contains private configuration.
 | `--type`                | Filter by content type                |
 | `--prioritize-tours`    | Prioritize tour pages                 |
 | `--resume`              | Continue from previous history        |
+| `--cooldown-hours`      | With `--resume`: re-allow a URL after N hours instead of skipping it forever (default 0 = permanent skip) |
 | `--submit`              | Submit URLs                           |
 | `--inspect-only`        | Run URL inspection without submission |
 | `--list-only`           | Preview without submission            |
@@ -595,6 +614,49 @@ Resume later
 ```
 
 This makes multi-day indexing workflows possible without repeatedly processing the same URLs.
+
+---
+
+# Scheduled Indexing
+
+`.github/workflows/scheduled-index.yml` runs the CLI on a daily schedule (and on
+manual `workflow_dispatch`) so you don't have to trigger bulk submission by hand.
+
+It runs:
+
+```bash
+google-indexer \
+  --site <SITE> \
+  --sitemap <SITEMAP> \
+  --site-url <SITE_URL> \
+  --service-account /tmp/sa.json \
+  --submit --resume --cooldown-hours 24 --limit 150 \
+  --history-backend json --db-path history/<name>.json
+```
+
+then commits the updated `history/<name>.json` back to the repo (only if it changed),
+so state persists across runs even though GitHub Actions runners are ephemeral and
+start fresh each time. `--cooldown-hours 24` means a URL submitted in a previous run
+becomes eligible again once 24 hours have passed, rather than being skipped forever —
+useful for a small daily batch that gradually re-requests indexing across the whole
+site instead of a one-shot submission.
+
+## Setup
+
+1. Complete [Google Search Console Setup](#google-search-console-setup) above and have
+   your `service_account.json` ready.
+2. In the repo's **Settings → Secrets and variables → Actions**, add a secret named
+   `GOOGLE_SERVICE_ACCOUNT_JSON` containing the full contents of that JSON file. Never
+   commit the file itself.
+3. Edit the `env:` block at the top of `.github/workflows/scheduled-index.yml` to set
+   `SITE`, `SITEMAP`, and `SITE_URL` for your site (these aren't secret — they're your
+   public site/sitemap URLs and Search Console property).
+4. The workflow needs `contents: write` permission to commit the history file back —
+   already set in the workflow file. If your repo's default `GITHUB_TOKEN` permissions
+   are restricted to read-only at the organization/repo level, enable write permission
+   for this workflow (Settings → Actions → General → Workflow permissions).
+5. Trigger a manual run first (Actions tab → "Scheduled Indexing" → Run workflow) to
+   confirm it authenticates and submits correctly before relying on the daily schedule.
 
 ---
 

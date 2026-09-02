@@ -77,6 +77,15 @@ You cannot index a large site in one run. Use --limit + --resume every day.
 --resume skips URLs already marked submitted in indexer_history.db
 (local history — not “already live in Google”).
 
+By default that skip is permanent. Add --cooldown-hours to re-allow a URL once that
+many hours have passed since it was last submitted/inspected, instead of skipping it
+forever — useful for a recurring daily job that re-requests indexing periodically:
+
+  ./run.sh --submit --resume --cooldown-hours 24 --limit 150
+
+This is exactly what .github/workflows/scheduled-index.yml runs on a daily cron —
+see README.md's "Scheduled Indexing" section to set it up for your site.
+
 
 Smarter order (high-value commercial pages first):
 
