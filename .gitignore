@@ -25,5 +25,6 @@ dist/
 .venv/
 venv/
 .idea/
+credentials/
 .vscode/
 .DS_Store
