@@ -37,9 +37,10 @@ afterAll(() => server.stop(true));
 test("submitAll records successes, failures and quota", async () => {
   const state = new State(":memory:");
   const urls = ["https://a.com/0", "https://a.com/1", "https://a.com/2"];
-  const quotaHit = await submitAll(urls, "token", state, `http://localhost:${server.port}/batch`);
+  const quotaHit = await submitAll(urls, "token", state, { endpoint: `http://localhost:${server.port}/batch`, quotaScope: "key-a" });
   expect(quotaHit).toBe(false);
   expect(state.stats()).toEqual({ submitted: 2, inspected: 0, errors: 1 });
   expect(state.failed()).toEqual(["https://a.com/1"]);
-  expect(state.quotaUsed()).toBe(3);
+  expect(state.quotaUsed("key-a")).toBe(3);
+  expect(state.quotaUsed()).toBe(0);
 });

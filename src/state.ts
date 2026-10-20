@@ -78,12 +78,16 @@ export class State {
     return { submitted: by.submitted ?? 0, inspected: by.inspected ?? 0, errors: (by.error ?? 0) + (by.quota ?? 0) };
   }
 
-  quotaUsed(): number {
-    return this.db.query<{ count: number }, [string]>("SELECT count FROM quota WHERE day=?").get(localDay())?.count ?? 0;
+  /** Google counts the Indexing API quota per project, so usage is tracked per key (`scope`). */
+  private quotaDay = (scope: string) => (scope ? `${localDay()}:${scope}` : localDay());
+
+  quotaUsed(scope = ""): number {
+    return this.db.query<{ count: number }, [string]>("SELECT count FROM quota WHERE day=?").get(this.quotaDay(scope))?.count ?? 0;
   }
 
-  addQuota(n: number) {
-    this.db.run("INSERT INTO quota (day, count) VALUES (?, ?) ON CONFLICT(day) DO UPDATE SET count = count + ?", [localDay(), n, n]);
+  addQuota(n: number, scope = "") {
+    const day = this.quotaDay(scope);
+    this.db.run("INSERT INTO quota (day, count) VALUES (?, ?) ON CONFLICT(day) DO UPDATE SET count = count + ?", [day, n, n]);
   }
 
   close() {

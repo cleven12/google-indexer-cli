@@ -48,10 +48,15 @@ async function sendBatch(urls: string[], token: string, endpoint: string): Promi
 }
 
 /** Submit URLs in chunks of BATCH_SIZE, retrying transient failures. Returns true if the daily quota was hit. */
-export async function submitAll(urls: string[], token: string, state: State, endpoint = BATCH_ENDPOINT): Promise<boolean> {
+export async function submitAll(
+  urls: string[],
+  token: string,
+  state: State,
+  { endpoint = BATCH_ENDPOINT, quotaScope = "" }: { endpoint?: string; quotaScope?: string } = {},
+): Promise<boolean> {
   for (let i = 0; i < urls.length; i += BATCH_SIZE) {
     let todo = urls.slice(i, i + BATCH_SIZE);
-    state.addQuota(todo.length);
+    state.addQuota(todo.length, quotaScope);
     for (let attempt = 0; todo.length; attempt++) {
       let results: PartResult[];
       try {

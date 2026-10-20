@@ -89,10 +89,13 @@ async function main() {
   const wantsInspect = !!a.inspect || !!a["inspect-only"];
   const state = new State(a["db-path"]!);
 
+  const keyFile = pickServiceAccount(a.profile, a["service-account"]);
+  const keyName = keyFile.split("/").pop()!;
+
   if (a.status) {
-    const used = state.quotaUsed();
+    const used = state.quotaUsed(keyName);
     console.log(`profile ${a.profile ?? "(none)"} | ${site} | property ${propertyUrl}`);
-    console.log(`quota today: ${used}/${DAILY_QUOTA} (${Math.max(0, DAILY_QUOTA - used)} left)`);
+    console.log(`quota today (${keyName}): ${used}/${DAILY_QUOTA} (${Math.max(0, DAILY_QUOTA - used)} left)`);
     for (const [k, v] of Object.entries(state.stats())) console.log(`${k.padEnd(10)} ${v}`);
     const failed = state.failed();
     if (failed.length) console.log(`failed sample: ${JSON.stringify(failed.slice(0, 5))}`);
@@ -137,10 +140,9 @@ async function main() {
   if (!wantsSubmit && !wantsInspect) return console.log("Nothing to do: pass --submit and/or --inspect (or --list-only).");
   if (urls.length === 0) return console.log("Queue is empty.");
 
-  const keyFile = pickServiceAccount(a.profile, a["service-account"]);
   if (!existsSync(keyFile)) die(`Service account not found: ${keyFile}\nSee docs/GSC_SETUP.md`);
   const sa = loadServiceAccount(keyFile);
-  console.log(`Key: ${keyFile.split("/").pop()}`);
+  console.log(`Key: ${keyName}`);
 
   const started = performance.now();
   const [indexingToken, inspectionToken] = await Promise.all([
@@ -153,11 +155,11 @@ async function main() {
   if (indexingToken) {
     jobs.push(
       (async () => {
-        const left = Math.max(0, DAILY_QUOTA - state.quotaUsed());
+        const left = Math.max(0, DAILY_QUOTA - state.quotaUsed(keyName));
         const batch = urls.slice(0, left);
         if (batch.length < urls.length) console.log(`Daily quota: only ${left} of ${urls.length} URLs fit today`);
         const t = performance.now();
-        await submitAll(batch, indexingToken, state);
+        await submitAll(batch, indexingToken, state, { quotaScope: keyName });
         console.log(`Submit finished in ${((performance.now() - t) / 1000).toFixed(2)}s`);
       })(),
     );
