@@ -67,10 +67,10 @@ cp profiles.example.json profiles.local.json
 
 ```bash
 # Preview bulk queue (no API) — fixture works offline
-python seo_indexer.py --profile demo --sitemap fixtures/sample_sitemap.xml --list-only --limit 20
+bun src/cli.ts --profile demo --sitemap fixtures/sample_sitemap.xml --list-only --limit 20
 
 # Submit a small batch (needs service_account.json)
-python seo_indexer.py \
+bun src/cli.ts \
   --site https://example.com.com \
   --service-account service_account.json \
   --type tours \
@@ -84,7 +84,7 @@ If you see **403**, the SA is not Owner on the Search Console property.
 For **URL Inspection** against a Domain property:
 
 ```bash
-python seo_indexer.py --site https://example.com.com --inspect-only --limit 3 \
+bun src/cli.ts --site https://example.com.com --inspect-only --limit 3 \
   --site-url "sc-domain:example.com.com"
 ```
 
@@ -99,13 +99,13 @@ Bulk “all pages at once” for a large tour site is **multi-day**:
 
 ```bash
 # Day 1 — commercial tours
-python seo_indexer.py --site https://example.com.com --type tours --submit --resume --limit 150
+bun src/cli.ts --site https://example.com.com --type tours --submit --resume --limit 150
 # Day 2 — destinations
-python seo_indexer.py --site https://example.com.com --type destinations --submit --resume --limit 150
+bun src/cli.ts --site https://example.com.com --type destinations --submit --resume --limit 150
 # Day 3 — guides + rest
-python seo_indexer.py --site https://example.com.com --type guides --type articles --submit --resume --limit 150
+bun src/cli.ts --site https://example.com.com --type guides --type articles --submit --resume --limit 150
 # Catch-up
-python seo_indexer.py --site https://example.com.com --submit --resume --limit 150
+bun src/cli.ts --site https://example.com.com --submit --resume --limit 150
 ```
 
 ## Multi-client tour operators
@@ -114,8 +114,8 @@ One SA can be Owner on **multiple** Search Console properties (each client domai
 Run with different `--site` / `--profile` and separate `--db-path` history files:
 
 ```bash
-python seo_indexer.py --site https://client-a.example --db-path history_client_a.db --submit --resume --limit 100
-python seo_indexer.py --site https://client-b.example --db-path history_client_b.db --submit --resume --limit 100
+bun src/cli.ts --site https://client-a.example --db-path history_client_a.db --submit --resume --limit 100
+bun src/cli.ts --site https://client-b.example --db-path history_client_b.db --submit --resume --limit 100
 ```
 
 ## Security

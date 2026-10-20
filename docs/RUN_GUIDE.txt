@@ -32,7 +32,7 @@ Config options:
   cp profiles.example.json profiles.local.json
   # edit production / staging URLs
 
-  python3 seo_indexer.py --list-profiles
+  bun src/cli.ts --list-profiles
 
 
 --------------------------------------------------------------------------------
@@ -40,13 +40,13 @@ Config options:
 --------------------------------------------------------------------------------
 
   # Offline fixture
-  python3 seo_indexer.py --profile demo \
+  bun src/cli.ts --profile demo \
     --sitemap fixtures/sample_sitemap.xml --list-only --limit 30
 
   # Your site (env / profile)
   ./run.sh --list-only --limit 50
 
-  python3 seo_indexer.py --profile production --list-only --limit 50
+  bun src/cli.ts --profile production --list-only --limit 50
 
   # Only tours in the queue
   ./run.sh --type tours --list-only --limit 30
@@ -55,7 +55,7 @@ Config options:
   ./run.sh --type tours --export-queue queues/tours.txt
 
   # Content mix + classification labels
-  python3 seo_indexer.py --site https://example.com \
+  bun src/cli.ts --site https://example.com \
     --sitemap fixtures/sample_sitemap.xml --list-only
 
 
@@ -77,15 +77,6 @@ You cannot index a large site in one run. Use --limit + --resume every day.
 --resume skips URLs already marked submitted in indexer_history.db
 (local history — not “already live in Google”).
 
-By default that skip is permanent. Add --cooldown-hours to re-allow a URL once that
-many hours have passed since it was last submitted/inspected, instead of skipping it
-forever — useful for a recurring daily job that re-requests indexing periodically:
-
-  ./run.sh --submit --resume --cooldown-hours 24 --limit 150
-
-This is exactly what .github/workflows/scheduled-index.yml runs on a daily cron —
-see README.md's "Scheduled Indexing" section to set it up for your site.
-
 
 Smarter order (high-value commercial pages first):
 
@@ -104,7 +95,7 @@ Smarter order (high-value commercial pages first):
 
 Without wrapper (explicit flags):
 
-  python3 seo_indexer.py \
+  bun src/cli.ts \
     --profile production \
     --service-account service_account.json \
     --type tours --prioritize-tours \
@@ -132,7 +123,7 @@ For “not indexed by Google”, use Search Console (recommended) or inspect.
 
   4. Submit only that list:
 
-  python3 seo_indexer.py \
+  bun src/cli.ts \
     --profile production \
     --urls-file queues/not_indexed.txt \
     --urls-file-only \
@@ -140,18 +131,13 @@ For “not indexed by Google”, use Search Console (recommended) or inspect.
     --limit 150
 
   # Next day for remaining lines still not in history
-  python3 seo_indexer.py \
-    --profile production \
-    --urls-file queues/not_indexed.txt \
-    --urls-file-only \
-    --submit --resume \
-    --limit 150
+  bun src/cli.ts --profile production --urls-file queues/not_indexed.txt --urls-file-only --submit --resume --limit 150
 
 
 --- 3B) Spot-check coverage (URL Inspection — limited quota) ---
 
   # Domain property
-  python3 seo_indexer.py \
+  bun src/cli.ts \
     --profile production \
     --type tours \
     --inspect-only \
@@ -159,7 +145,7 @@ For “not indexed by Google”, use Search Console (recommended) or inspect.
     --site-url "sc-domain:example.com"
 
   # URL-prefix property (default is https://example.com/)
-  python3 seo_indexer.py \
+  bun src/cli.ts \
     --site https://example.com \
     --url /tours/some-tour \
     --inspect-only
@@ -174,13 +160,13 @@ For “not indexed by Google”, use Search Console (recommended) or inspect.
 
 --- 3D) Single important URL ---
 
-  python3 seo_indexer.py \
+  bun src/cli.ts \
     --profile production \
     --url /tours/flagship-product \
     --submit
 
   # or full URL
-  python3 seo_indexer.py \
+  bun src/cli.ts \
     --site https://example.com \
     --url https://example.com/tours/flagship-product \
     --submit
@@ -191,20 +177,20 @@ For “not indexed by Google”, use Search Console (recommended) or inspect.
 --------------------------------------------------------------------------------
 
   # File only (ignore sitemap)
-  python3 seo_indexer.py \
+  bun src/cli.ts \
     --site https://example.com \
     --urls-file queues/new_pages.txt \
     --urls-file-only \
     --list-only
 
-  python3 seo_indexer.py \
+  bun src/cli.ts \
     --site https://example.com \
     --urls-file queues/new_pages.txt \
     --urls-file-only \
     --submit --resume --limit 150
 
   # Sitemap + extra file merged
-  python3 seo_indexer.py \
+  bun src/cli.ts \
     --site https://example.com \
     --sitemap https://example.com/sitemap.xml \
     --urls-file queues/extra.txt \
@@ -259,12 +245,12 @@ For “not indexed by Google”, use Search Console (recommended) or inspect.
 
   curl -o sitemap.xml https://example.com/sitemap.xml
 
-  python3 seo_indexer.py \
+  bun src/cli.ts \
     --profile production \
     --sitemap ./sitemap.xml \
     --list-only --limit 30
 
-  python3 seo_indexer.py \
+  bun src/cli.ts \
     --profile production \
     --sitemap ./sitemap.xml \
     --submit --resume --limit 150
@@ -276,12 +262,12 @@ For “not indexed by Google”, use Search Console (recommended) or inspect.
 
 Separate history DB per site so resume does not mix clients:
 
-  python3 seo_indexer.py \
+  bun src/cli.ts \
     --site https://client-a.example \
     --db-path history_client_a.db \
     --submit --resume --limit 100
 
-  python3 seo_indexer.py \
+  bun src/cli.ts \
     --site https://client-b.example \
     --db-path history_client_b.db \
     --submit --resume --limit 100
@@ -314,7 +300,7 @@ Separate history DB per site so resume does not mix clients:
   Retry failed                      ./run.sh --retry-errors --submit --limit 50
   One URL                           --url /path --submit
   Inspect sample                    --inspect-only --limit 10
-  List profiles                     python3 seo_indexer.py --list-profiles
+  List profiles                     bun src/cli.ts --list-profiles
 
 
 --------------------------------------------------------------------------------
