@@ -1,29 +1,43 @@
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.log
-*.sqlite
-*.sqlite3
+# dependencies
+node_modules/
+
+# secrets and local config
 .env
 .env.*
 !.env.example
 service_account.json
 *-service-account.json
-seo_indexing_results.json
-indexer_history.*
-*.db
-results/
-logs/
-queues/*
-!queues/.gitkeep
+auth/
+accounts.json
 profiles.local.json
 profiles.private.json
-*.egg-info/
-build/
-dist/
-.venv/
+
+# runtime state
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+history/*
+!history/.gitkeep
+queues/*
+!queues/.gitkeep
+logs/
+*.log
+coverage-report-*.json
+
+# operator scratch files and private notes
+hist.txt
+old-flat-urls.txt
+GSC-API-PLAYBOOK.md
+docs/claudeflare auth.md
+
+# python leftovers
 venv/
+.venv/
+__pycache__/
+
+# editors / OS
 .idea/
 .vscode/
 .DS_Store

@@ -1,29 +1,17 @@
 name: Scheduled Indexing
 
-# Runs the bulk indexer on a schedule against one site (edit SITE/SITEMAP/SITE_URL
-# below), persisting submission history by committing history/<name>.json back to
-# this repo after each run (Actions runners are ephemeral - nothing survives a run
-# unless it's written back somewhere durable).
-#
-# Setup: add a GOOGLE_SERVICE_ACCOUNT_JSON repo secret with the full contents of your
-# service_account.json (see docs/GSC_SETUP.md), then edit the env: block below.
-# See README.md's "Scheduled Indexing" section for full setup steps.
+# Submits a slice of the sitemap once a day. Configure via repository settings:
+#   secret   GOOGLE_SERVICE_ACCOUNT_JSON  full contents of the service account key
+#   variable SITE, SITEMAP, SITE_URL      (optional: LIMIT, COOLDOWN_HOURS)
+# The history database is kept in the Actions cache between runs.
 
 on:
   schedule:
-    - cron: "0 6 * * *" # daily, 06:00 UTC
+    - cron: "0 6 * * *"
   workflow_dispatch: {}
 
-env:
-  SITE: https://kilitasafaris.com
-  SITEMAP: https://kilitasafaris.com/sitemap.xml
-  SITE_URL: sc-domain:kilitasafaris.com
-  HISTORY_FILE: history/kilita.json
-  LIMIT: 150
-  COOLDOWN_HOURS: 24
-
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: scheduled-index
@@ -32,52 +20,44 @@ concurrency:
 jobs:
   index:
     runs-on: ubuntu-latest
+    env:
+      HISTORY_DB: history/indexer.db
     steps:
       - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Restore history
+        uses: actions/cache/restore@v4
         with:
-          python-version: "3.12"
+          path: ${{ env.HISTORY_DB }}*
+          key: index-history-${{ github.run_id }}
+          restore-keys: index-history-
 
-      - name: Install dependencies
-        run: python -m pip install --upgrade pip && pip install -e .
-
-      - name: Write service account credentials
-        run: |
-          mkdir -p /tmp/gsc
-          printf '%s' "$GOOGLE_SERVICE_ACCOUNT_JSON" > /tmp/gsc/service_account.json
+      - name: Submit
         env:
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
-
-      - name: Run bulk submission
         run: |
-          mkdir -p "$(dirname "$HISTORY_FILE")"
-          google-indexer \
-            --site "$SITE" \
-            --sitemap "$SITEMAP" \
-            --site-url "$SITE_URL" \
-            --service-account /tmp/gsc/service_account.json \
-            --submit \
-            --resume \
-            --cooldown-hours "$COOLDOWN_HOURS" \
-            --limit "$LIMIT" \
-            --history-backend json \
-            --db-path "$HISTORY_FILE"
+          umask 077
+          printf '%s' "$GOOGLE_SERVICE_ACCOUNT_JSON" > "$RUNNER_TEMP/key.json"
+          mkdir -p history
+          bun src/cli.ts \
+            --site "${{ vars.SITE }}" \
+            --sitemap "${{ vars.SITEMAP }}" \
+            --site-url "${{ vars.SITE_URL }}" \
+            --service-account "$RUNNER_TEMP/key.json" \
+            --submit --resume \
+            --cooldown-hours "${{ vars.COOLDOWN_HOURS || 24 }}" \
+            --limit "${{ vars.LIMIT || 150 }}" \
+            --db-path "$HISTORY_DB"
 
-      - name: Remove service account credentials
+      - name: Remove credentials
         if: always()
-        run: rm -rf /tmp/gsc
+        run: rm -f "$RUNNER_TEMP/key.json"
 
-      - name: Commit updated history
+      - name: Save history
         if: always()
-        run: |
-          if [ -n "$(git status --porcelain -- "$HISTORY_FILE")" ]; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add "$HISTORY_FILE"
-            git commit -m "Update indexing history ($(date -u +%Y-%m-%d))"
-            git push
-          else
-            echo "No history changes to commit."
-          fi
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.HISTORY_DB }}*
+          key: index-history-${{ github.run_id }}
