@@ -1,4 +1,0 @@
-requests>=2.32.0
-
-# Optional for --history-backend mysql
-# pymysql>=1.1.0   # pip install pymysql  (pure python, no compile)

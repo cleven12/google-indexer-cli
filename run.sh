@@ -27,16 +27,14 @@ fi
 SITE="${SITE:-https://example.com.com}"
 SITEMAP="${SITEMAP:-https://example.com.com/sitemap.xml}"
 SERVICE_ACCOUNT="${SERVICE_ACCOUNT:-service_account.json}"
-HISTORY_BACKEND="${HISTORY_BACKEND:-sqlite}"
 DB_PATH="${DB_PATH:-indexer_history.db}"
 PROFILE="${PROFILE:-demo}"
 
-exec python3 seo_indexer.py \
+exec bun src/cli.ts \
   --profile "${PROFILE}" \
   --site "${SITE}" \
   --sitemap "${SITEMAP}" \
   --service-account "${SERVICE_ACCOUNT}" \
-  --history-backend "${HISTORY_BACKEND}" \
   --db-path "${DB_PATH}" \
   --prioritize-tours \
   "$@"
