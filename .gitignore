@@ -39,5 +39,6 @@ __pycache__/
 
 # editors / OS
 .idea/
+credentials/
 .vscode/
 .DS_Store
